@@ -1,0 +1,1389 @@
+import { useState, useEffect } from 'react';
+import socket from './socket';
+import { racerById } from './racers';
+
+// ─── Card helpers ─────────────────────────────────────────────────────────────
+function actionIcon(card) {
+  if (card.type === 'move') return card.value === 1 ? '▶' : '▶▶';
+  if (card.type === 'double')  return '×2';
+  if (card.type === 'boost')   return '↑';
+  if (card.type === 'stumble') return '✕';
+  return '?';
+}
+
+function actionLabel(card) {
+  if (card.type === 'move')    return `Move +${card.value}`;
+  if (card.type === 'double')  return 'Double';
+  if (card.type === 'boost')   return 'Boost';
+  if (card.type === 'stumble') return 'Stumble';
+  return card.type;
+}
+
+// ─── Mini card — deck grid ────────────────────────────────────────────────────
+function MiniCard({ card, racers }) {
+  const racer = racerById(card.racerId, racers);
+  const c = racer.color;
+  const shortName = racer.name.split(' ')[0];
+  return (
+    <div style={{
+      width: 58, height: 80, borderRadius: 7,
+      border: `1.5px solid ${c}88`, background: `${c}18`, color: c,
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'space-between',
+      padding: '4px 3px', boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+      flexShrink: 0,
+    }}>
+      <span style={{ fontSize: '0.52rem', fontWeight: 'bold', alignSelf: 'flex-start', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: '100%' }}>
+        {shortName}
+      </span>
+      <span style={{ fontSize: '1.4rem', lineHeight: 1 }}>{actionIcon(card)}</span>
+      <span style={{ fontSize: '0.52rem', fontWeight: 'bold', alignSelf: 'flex-end', transform: 'rotate(180deg)', lineHeight: 1, whiteSpace: 'nowrap' }}>
+        {shortName}
+      </span>
+    </div>
+  );
+}
+
+// ─── Draft card — large, clickable ───────────────────────────────────────────
+function DraftCard({ card, racers, onSelect }) {
+  const [hovered, setHovered] = useState(false);
+  const racer = racerById(card.racerId, racers);
+  const c = racer.color;
+
+  return (
+    <div
+      onClick={onSelect}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: 120, height: 175, borderRadius: 12,
+        border: `2px solid ${hovered ? c : c + '77'}`,
+        background: hovered ? `${c}28` : '#111',
+        color: c,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 8px', cursor: 'pointer',
+        boxShadow: hovered ? `0 0 22px ${c}55, 0 6px 18px rgba(0,0,0,0.6)` : '0 3px 10px rgba(0,0,0,0.5)',
+        transform: hovered ? 'translateY(-8px) scale(1.05)' : 'none',
+        transition: 'all 0.15s ease', userSelect: 'none',
+      }}
+    >
+      <span style={{ fontSize: '0.72rem', fontWeight: 'bold', textAlign: 'center', lineHeight: 1.2 }}>
+        {racer.name}
+      </span>
+      <span style={{ fontSize: '3.2rem', lineHeight: 1 }}>{actionIcon(card)}</span>
+      <span style={{ fontSize: '0.7rem', color: `${c}cc`, marginTop: -8 }}>{actionLabel(card)}</span>
+      <span style={{ fontSize: '0.72rem', fontWeight: 'bold', transform: 'rotate(180deg)', textAlign: 'center', lineHeight: 1.2 }}>
+        {racer.name}
+      </span>
+    </div>
+  );
+}
+
+// ─── Per-racer distribution table ────────────────────────────────────────────
+function DeckDistribution({ deck, racers }) {
+  const counts = {};
+  for (const r of racers) counts[r.id] = { move1: 0, move2: 0, boost: 0, stumble: 0, double: 0, total: 0 };
+  for (const card of deck) {
+    const c = counts[card.racerId];
+    if (!c) continue;
+    c.total++;
+    if (card.type === 'move' && card.value === 1) c.move1++;
+    else if (card.type === 'move' && card.value === 2) c.move2++;
+    else c[card.type]++;
+  }
+  const maxTotal = Math.max(...Object.values(counts).map((c) => c.total), 1);
+
+  return (
+    <div>
+      <p style={s.label}>Base Deck — {deck.length} cards</p>
+      {racers.map((racer) => {
+        const c = counts[racer.id];
+        return (
+          <div key={racer.id} style={{ marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+              <span style={{ color: racer.color, fontWeight: 'bold', fontSize: '0.82rem', width: 120, flexShrink: 0 }}>
+                {racer.name}
+              </span>
+              <div style={{ flex: 1, background: '#2a2a2a', borderRadius: 4, height: 12, overflow: 'hidden' }}>
+                <div style={{ width: `${(c.total / maxTotal) * 100}%`, height: '100%', background: racer.color, borderRadius: 4, transition: 'width 0.3s' }} />
+              </div>
+              <span style={{ fontSize: '0.8rem', color: '#aaa', width: 20, textAlign: 'right' }}>{c.total}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 4, paddingLeft: 128 }}>
+              {c.move1  > 0 && <Tag color="#4a9eff">{c.move1}×▶</Tag>}
+              {c.move2  > 0 && <Tag color="#00cfff">{c.move2}×▶▶</Tag>}
+              {c.boost  > 0 && <Tag color="#4caf50">{c.boost}×↑</Tag>}
+              {c.stumble > 0 && <Tag color="#f44336">{c.stumble}×✕</Tag>}
+              {c.double > 0 && <Tag color="#f5c518">{c.double}×2</Tag>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Tag({ color, children }) {
+  return (
+    <span style={{ fontSize: '0.68rem', color, border: `1px solid ${color}55`, borderRadius: 3, padding: '1px 5px' }}>
+      {children}
+    </span>
+  );
+}
+
+// ─── Deck grid ────────────────────────────────────────────────────────────────
+function DeckGrid({ deck, racers }) {
+  return (
+    <div>
+      <p style={s.label}>Deck Order (top → bottom)</p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, overflowY: 'auto', background: '#0f0f0f', borderRadius: 8, padding: 8 }}>
+        {deck.map((card, i) => <MiniCard key={i} card={card} racers={racers} />)}
+      </div>
+    </div>
+  );
+}
+
+// ─── Draft panel ──────────────────────────────────────────────────────────────
+function DraftPanel({ turnData, myOptions, players, racers, mySocketId, onSelectCard, draftDone }) {
+  if (draftDone) {
+    return (
+      <div style={s.banner}>
+        <span style={{ fontSize: '1.5rem' }}>✅</span>
+        <div>
+          <strong>Deck finalised!</strong>
+          <p style={{ margin: 0, fontSize: '0.85rem', color: '#aaa' }}>All players have secretly added a card. Race starting…</p>
+        </div>
+      </div>
+    );
+  }
+  if (!turnData) return null;
+
+  const currentPlayer = players[turnData.currentTurnIndex];
+  const isMyTurn = currentPlayer?.id === mySocketId;
+
+  return (
+    <div>
+      <div style={{ ...s.banner, borderColor: isMyTurn ? '#f5c518' : '#333' }}>
+        <span style={{ fontSize: '1.5rem' }}>🎴</span>
+        <div>
+          <strong style={{ color: isMyTurn ? '#f5c518' : '#e0e0e0' }}>
+            {isMyTurn ? 'Your turn — pick a card!' : `${turnData.currentPlayerName} is choosing…`}
+          </strong>
+          <p style={{ margin: 0, fontSize: '0.82rem', color: '#888' }}>
+            {isMyTurn ? "Your choice is secret. Others won't see which card you picked." : 'They are secretly adding a racer card to the deck.'}
+          </p>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '0.75rem 0' }}>
+        {players.map((p) => {
+          const done = turnData.completedPlayers?.includes(p.name);
+          const isCurrent = p.id === currentPlayer?.id;
+          return (
+            <span key={p.id} style={{
+              padding: '3px 11px', borderRadius: 20, fontSize: '0.78rem',
+              background: done ? '#1b3a1b' : isCurrent ? '#2a2200' : '#1e1e1e',
+              border: `1px solid ${done ? '#4caf50' : isCurrent ? '#f5c518' : '#333'}`,
+              color: done ? '#4caf50' : isCurrent ? '#f5c518' : '#666',
+            }}>
+              {done ? '✓ ' : isCurrent ? '◆ ' : ''}{p.name}
+            </span>
+          );
+        })}
+      </div>
+
+      {isMyTurn && myOptions && (
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ color: '#f5c518', margin: '0 0 1rem', fontWeight: 'bold' }}>Choose one card to secretly add:</p>
+          <div style={{ display: 'flex', gap: '1.25rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {myOptions.map((card, i) => (
+              <DraftCard key={i} card={card} racers={racers} onSelect={() => onSelectCard(i)} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Race track ───────────────────────────────────────────────────────────────
+function RaceTrack({ racers, raceState, pulsingRacer, trackLength }) {
+  if (!raceState) return null;
+  return (
+    <div>
+      <p style={s.label}>Race — First to {trackLength} wins!</p>
+      {racers.map((racer) => {
+        const rs = raceState[racer.id] ?? { position: 0, status: 'active' };
+        const pct = Math.min((rs.position / trackLength) * 100, 100);
+        const isWinner   = rs.position >= trackLength;
+        const isStumbled = rs.status === 'stumbled';
+        const isPulsing  = pulsingRacer === racer.id;
+
+        return (
+          <div key={racer.id} style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, fontSize: '0.82rem' }}>
+              <span style={{ color: racer.color, fontWeight: 'bold' }}>
+                {isWinner ? '🏆 ' : isStumbled ? '💤 ' : ''}{racer.name}
+              </span>
+              <span style={{ color: '#666' }}>{rs.position}/{trackLength}</span>
+            </div>
+            <div style={{ background: '#111', border: `1px solid ${racer.color}33`, borderRadius: 6, height: 30, position: 'relative', overflow: 'hidden' }}>
+              {[25, 50, 75].map((m) => (
+                <div key={m} style={{ position: 'absolute', left: `${m}%`, top: 0, bottom: 0, width: 1, background: '#2a2a2a', zIndex: 1 }} />
+              ))}
+              <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, background: isWinner ? racer.color : '#444', zIndex: 2 }} />
+              <div style={{
+                width: `${pct}%`, height: '100%',
+                background: isWinner ? racer.color : `${racer.color}bb`,
+                boxShadow: isPulsing ? `0 0 18px 6px ${racer.color}` : 'none',
+                transition: isPulsing
+                  ? 'width 0.45s ease, box-shadow 0.05s ease'
+                  : 'width 0.45s ease, box-shadow 0.35s ease',
+                display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                paddingRight: 4, position: 'relative', zIndex: 3,
+              }}>
+                {pct > 8 && (
+                  <span style={{
+                    fontSize: '1.2rem',
+                    filter: isStumbled ? 'grayscale(1)' : 'none',
+                    transform: isPulsing ? 'scale(1.35)' : 'scale(1)',
+                    transition: isPulsing ? 'transform 0.05s ease' : 'transform 0.35s ease',
+                    display: 'inline-block',
+                  }}>🐎</span>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Race log ─────────────────────────────────────────────────────────────────
+function RaceLog({ log, racers }) {
+  if (!log.length) return null;
+  return (
+    <div>
+      <p style={s.label}>Card flip history</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
+        {[...log].reverse().map((entry, i) => {
+          const racer = racerById(entry.card.racerId, racers);
+          return (
+            <div key={i} style={{ fontSize: '0.78rem', color: '#777', display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ color: racer.color, fontWeight: 'bold', width: 110, flexShrink: 0 }}>{racer.name}</span>
+              <span style={{ color: racer.color }}>{actionIcon(entry.card)}</span>
+              <span>{entry.description}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Toast notifications ──────────────────────────────────────────────────────
+function ToastLayer({ toasts, racers }) {
+  return (
+    <>
+      {toasts.map((t) => {
+        const racer = racerById(t.card.racerId, racers);
+        return (
+          <div
+            key={t.id}
+            style={{
+              position: 'fixed', left: `${t.x}%`, top: `${t.y}%`,
+              zIndex: 999, pointerEvents: 'none',
+              animation: `toastLife ${t.duration}ms ease forwards`,
+              background: '#0a0a0a', border: `2px solid ${racer.color}`,
+              borderRadius: 8, padding: '6px 14px',
+              display: 'flex', alignItems: 'center', gap: 8,
+              boxShadow: `0 0 18px ${racer.color}55`, whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{ fontSize: '1.1rem' }}>{actionIcon(t.card)}</span>
+            <span style={{ color: racer.color, fontWeight: 'bold', fontSize: '0.85rem' }}>{racer.name}</span>
+            <span style={{ color: '#aaa', fontSize: '0.78rem' }}>{t.shortDesc}</span>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+// ─── Shuffle + countdown overlay ─────────────────────────────────────────────
+function RaceCountdown({ prep }) {
+  if (!prep) return null;
+
+  const overlayStyle = {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    zIndex: 900, flexDirection: 'column', gap: '0.5rem',
+  };
+
+  if (prep.phase === 'shuffling') {
+    return (
+      <div style={overlayStyle}>
+        <div style={{ fontSize: '4rem', animation: 'cardSpin 0.9s ease infinite' }}>🃏</div>
+        <div style={{ color: '#f5c518', fontSize: '1.4rem', fontWeight: 'bold', marginTop: '0.5rem' }}>
+          Shuffling {prep.deckSize} cards…
+        </div>
+      </div>
+    );
+  }
+  if (prep.phase === 'countdown') {
+    return (
+      <div style={overlayStyle}>
+        <div key={prep.number} style={{ fontSize: '9rem', fontWeight: 'bold', color: '#f5c518', lineHeight: 1, animation: 'countdownPop 0.6s ease forwards' }}>
+          {prep.number}
+        </div>
+      </div>
+    );
+  }
+  if (prep.phase === 'go') {
+    return (
+      <div style={overlayStyle}>
+        <div style={{ fontSize: '7rem', fontWeight: 'bold', color: '#4caf50', lineHeight: 1, animation: 'countdownPop 0.5s ease forwards' }}>
+          And they're off!
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+// ─── Bet type constants (must mirror server BET_TYPES) ───────────────────────
+// slots: { odds, loss } — win earns chip×odds, lose costs chip×loss (loss=0 = safe)
+const BET_TYPES = {
+  win:   { label: 'WIN',   slots: [{ odds: 7, loss: 2 }, { odds: 5, loss: 2 }, { odds: 3, loss: 1 }], desc: '1st',   color: '#f5c518' },
+  place: { label: 'PLACE', slots: [{ odds: 4, loss: 1 }, { odds: 2, loss: 1 }],                        desc: 'Top 2', color: '#4a9eff' },
+  show:  { label: 'SHOW',  slots: [{ odds: 2, loss: 1 }, { odds: 2, loss: 0 }],                        desc: 'Top 3', color: '#4caf50' },
+};
+const BET_TYPE_ORDER = ['show', 'place', 'win'];
+
+// ─── Chip tray — fixed at bottom ──────────────────────────────────────────────
+// Each chip resets every race. Greyed out once placed (each value usable once).
+const CHIPS = [
+  { value: 1, bg: '#e0e0e0', fg: '#111' },
+  { value: 2, bg: '#4a9eff', fg: '#fff' },
+  { value: 3, bg: '#f44336', fg: '#fff' },
+  { value: 4, bg: '#4caf50', fg: '#fff' },
+  { value: 5, bg: '#f5c518', fg: '#111' },
+];
+
+function ChipTray({ held, usedChips, tokens, onSelect, onClear }) {
+  return (
+    <div style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 800,
+      background: 'rgba(10,18,10,0.97)', borderTop: '2px solid #1a4a1a',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      gap: 14, padding: '10px 0 max(10px, env(safe-area-inset-bottom))',
+    }}>
+      <span style={{ fontSize: '0.72rem', color: '#3a6a3a', textTransform: 'uppercase', letterSpacing: 1, marginRight: 4 }}>
+        💰 {tokens}
+      </span>
+      {CHIPS.map((chip) => {
+        const isHeld  = held === chip.value;
+        const isUsed  = usedChips.has(chip.value) && !isHeld;
+        return (
+          <div
+            key={chip.value}
+            onClick={() => isUsed ? null : isHeld ? onClear() : onSelect(chip.value)}
+            style={{
+              width: 52, height: 52, borderRadius: '50%',
+              background: chip.bg,
+              border: isHeld ? '3px solid #fff' : '3px solid rgba(255,255,255,0.15)',
+              boxShadow: isHeld
+                ? `0 0 0 4px ${chip.bg}66, 0 0 28px ${chip.bg}88, 0 -10px 0 rgba(0,0,0,0.35)`
+                : '0 4px 14px rgba(0,0,0,0.55)',
+              transform: isHeld ? 'translateY(-12px) scale(1.18)' : 'none',
+              transition: 'all 0.15s ease',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: 'bold', fontSize: '1.1rem', color: chip.fg,
+              cursor: isUsed ? 'not-allowed' : 'pointer',
+              userSelect: 'none', opacity: isUsed ? 0.25 : 1,
+            }}
+          >
+            {chip.value}
+          </div>
+        );
+      })}
+      {held != null && (
+        <span onClick={onClear} style={{ fontSize: '0.75rem', color: '#666', cursor: 'pointer', marginLeft: 4, textDecoration: 'underline' }}>
+          cancel
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── Single bet cell ──────────────────────────────────────────────────────────
+// Width is controlled by the flex group in BettingGrid — don't set a fixed width here.
+function BetCell({ racer, betType, odds, loss, occupant, isMe, held, usedChips, betsLocked, onPlace }) {
+  const typeDef  = BET_TYPES[betType];
+  const chipUsed = held != null && usedChips.has(held);
+  const canPlace = !betsLocked && !occupant && held != null && !chipUsed;
+
+  function handleClick() {
+    if (betsLocked || isMe) return;
+    if (canPlace) onPlace(held);
+  }
+
+  const borderColor = isMe     ? racer.color
+                    : canPlace ? typeDef.color
+                    : occupant ? '#333'
+                               : '#1a3a1a';
+  const bgColor     = isMe     ? racer.color + '28'
+                    : canPlace ? typeDef.color + '18'
+                    : occupant ? '#181818'
+                               : '#0c1a0c';
+
+  const placedAmount = occupant?.amount;
+
+  return (
+    <div
+      onClick={handleClick}
+      title={
+        isMe     ? `Your bet — ${occupant?.amount}-chip` :
+        occupant ? `${occupant.playerName} — ${occupant.amount}-chip` :
+        canPlace ? `${held}-chip: collect ${held * odds}${loss > 0 ? `, lose ${loss} if not` : ''}` :
+        held == null ? 'Pick a chip first' : chipUsed ? 'Chip already placed' : ''
+      }
+      style={{
+        flex: 1, minWidth: 0, height: 66, borderRadius: 8,
+        border: `2px solid ${borderColor}`, background: bgColor,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        cursor: canPlace ? 'pointer' : 'default',
+        transition: 'border-color 0.12s, background 0.12s', position: 'relative',
+        boxShadow: canPlace ? `0 0 10px ${typeDef.color}55` : 'none',
+        gap: 2,
+      }}
+    >
+      {/* Win: shows odds multiplier when empty, actual collect when chip placed */}
+      <span style={{ fontSize: '0.78rem', fontWeight: 'bold', lineHeight: 1, color: isMe ? racer.color : occupant ? '#666' : typeDef.color, pointerEvents: 'none' }}>
+        {placedAmount != null ? placedAmount * odds : `${odds}×`}
+      </span>
+
+      {/* Loss: fixed amount per cell, never changes with chip size */}
+      {loss > 0 && (
+        <span style={{ fontSize: '0.72rem', fontWeight: 'bold', lineHeight: 1, color: isMe ? racer.color + 'aa' : '#c0392b', pointerEvents: 'none' }}>
+          -{loss}
+        </span>
+      )}
+
+      {/* Placed chip circle */}
+      {occupant && (
+        <div style={{
+          width: 22, height: 22, borderRadius: '50%', marginTop: 1,
+          background: isMe ? racer.color : '#2a2a2a',
+          border: `2px solid ${isMe ? racer.color + 'cc' : '#444'}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '0.65rem', fontWeight: 'bold',
+          color: isMe ? (racer.color === '#f5c518' ? '#111' : '#fff') : '#888',
+          pointerEvents: 'none',
+        }}>
+          {occupant.amount}
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+// ─── Betting grid ─────────────────────────────────────────────────────────────
+// Cells auto-size via flex so the grid fills whatever width it's given.
+// Column groups use flex: slotCount so each individual cell is the same width.
+const NAME_COL = 70; // px — horse name column
+const GRP_GAP  = 6;  // px — gap between SHOW / PLACE / WIN groups
+const CELL_GAP = 3;  // px — gap between cells within a group
+
+function BettingGrid({ racers, myBets, betSummary, betsLocked, held, usedChips, onPlace }) {
+  const slots = betSummary?.slots ?? {};
+
+  return (
+    <div style={{ background: '#071a07', border: '2px solid #1a4a1a', borderRadius: 12, padding: '0.5rem 0.6rem' }}>
+
+      {/* Status bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <span style={{ color: '#4a8a4a', fontWeight: 'bold', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: 2 }}>
+          Betting Mat
+        </span>
+        {betsLocked
+          ? <span style={{ fontSize: '0.75rem', color: '#f44336', fontWeight: 'bold' }}>🔒 Locked</span>
+          : held != null
+            ? <span style={{ fontSize: '0.75rem', color: '#f5c518' }}>Tap cell — <strong>{held}</strong>-chip</span>
+            : <span style={{ fontSize: '0.75rem', color: '#4a8a4a' }}>Pick a chip below</span>
+        }
+      </div>
+
+      {/* Column group headers — same flex structure as rows */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', marginBottom: 4 }}>
+        <div style={{ width: NAME_COL, flexShrink: 0 }} />
+        {BET_TYPE_ORDER.map((type, gi) => {
+          const def = BET_TYPES[type];
+          return (
+            <div
+              key={type}
+              style={{ flex: def.slots.length, textAlign: 'center', marginRight: gi < BET_TYPE_ORDER.length - 1 ? GRP_GAP : 0 }}
+            >
+              <div style={{ fontSize: '0.65rem', fontWeight: 'bold', color: def.color, textTransform: 'uppercase', letterSpacing: 1 }}>
+                {def.label}
+              </div>
+              <div style={{ fontSize: '0.58rem', color: def.color + '88' }}>{def.desc}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Racer rows */}
+      {racers.map((racer) => (
+        <div key={racer.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+
+          {/* Horse name */}
+          <div style={{ width: NAME_COL, flexShrink: 0, paddingRight: 5, overflow: 'hidden' }}>
+            <div style={{ color: racer.color, fontWeight: 'bold', fontSize: '0.8rem', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              🐎 {racer.name.split(' ')[0]}
+            </div>
+            {racer.name.split(' ').length > 1 && (
+              <div style={{ color: racer.color + '77', fontSize: '0.6rem', lineHeight: 1 }}>
+                {racer.name.split(' ').slice(1).join(' ')}
+              </div>
+            )}
+          </div>
+
+          {/* Bet type groups */}
+          {BET_TYPE_ORDER.map((betType, gi) => {
+            const def        = BET_TYPES[betType];
+            const racerSlots = slots[racer.id]?.[betType] ?? def.slots.map(() => null);
+            return (
+              <div
+                key={betType}
+                style={{ flex: def.slots.length, display: 'flex', gap: CELL_GAP, marginRight: gi < BET_TYPE_ORDER.length - 1 ? GRP_GAP : 0 }}
+              >
+                {def.slots.map((slot, slotIndex) => {
+                  const occupant = racerSlots[slotIndex];
+                  const myBetKey = `${racer.id}_${betType}`;
+                  const myBet    = myBets[myBetKey];
+                  const isMine   = myBet?.slotIndex === slotIndex;
+                  return (
+                    <BetCell
+                      key={slotIndex}
+                      racer={racer}
+                      betType={betType}
+                      odds={slot.odds}
+                      loss={slot.loss}
+                      occupant={occupant}
+                      isMe={isMine}
+                      held={held}
+                      usedChips={usedChips}
+                      betsLocked={betsLocked}
+                      onPlace={(amount) => onPlace(racer.id, betType, slotIndex, amount)}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Result cell — read-only, highlights won/lost bets ───────────────────────
+function ResultCell({ betType, odds, loss, myBet, result }) {
+  const typeDef = BET_TYPES[betType];
+
+  if (!myBet) {
+    return (
+      <div style={{
+        flex: 1, minWidth: 0, height: 66, borderRadius: 8,
+        border: '2px solid #111', background: '#080e08',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 2,
+      }}>
+        <span style={{ fontSize: '0.78rem', fontWeight: 'bold', lineHeight: 1, color: typeDef.color + '30' }}>
+          {odds}×
+        </span>
+        {loss > 0 && (
+          <span style={{ fontSize: '0.72rem', fontWeight: 'bold', lineHeight: 1, color: '#c0392b30' }}>
+            -{loss}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  const won     = result?.won ?? false;
+  const collect = result?.collect ?? 0;
+  const lostAmt = result?.lost ?? 0;
+  const glow    = won ? '#4caf50' : '#f44336';
+
+  return (
+    <div style={{
+      flex: 1, minWidth: 0, height: 66, borderRadius: 8,
+      border: `2px solid ${glow}`,
+      background: glow + '22',
+      boxShadow: `0 0 14px ${glow}55`,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      gap: 2,
+    }}>
+      <div style={{
+        width: 22, height: 22, borderRadius: '50%',
+        background: glow,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '0.65rem', fontWeight: 'bold', color: '#fff',
+      }}>
+        {myBet.amount}
+      </div>
+      {won ? (
+        <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#4caf50' }}>+{collect}</span>
+      ) : lostAmt > 0 ? (
+        <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#f44336' }}>-{lostAmt}</span>
+      ) : (
+        <span style={{ fontSize: '0.68rem', color: '#888' }}>safe</span>
+      )}
+    </div>
+  );
+}
+
+// ─── Result grid — read-only betting board shown after race ───────────────────
+function ResultGrid({ racers, myBets, betResults }) {
+  return (
+    <div style={{ background: '#071a07', border: '2px solid #1a4a1a', borderRadius: 12, padding: '0.5rem 0.6rem' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', marginBottom: 4 }}>
+        <div style={{ width: NAME_COL, flexShrink: 0 }} />
+        {BET_TYPE_ORDER.map((type, gi) => {
+          const def = BET_TYPES[type];
+          return (
+            <div key={type} style={{ flex: def.slots.length, textAlign: 'center', marginRight: gi < BET_TYPE_ORDER.length - 1 ? GRP_GAP : 0 }}>
+              <div style={{ fontSize: '0.65rem', fontWeight: 'bold', color: def.color, textTransform: 'uppercase', letterSpacing: 1 }}>{def.label}</div>
+              <div style={{ fontSize: '0.58rem', color: def.color + '88' }}>{def.desc}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {racers.map((racer) => (
+        <div key={racer.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+          <div style={{ width: NAME_COL, flexShrink: 0, paddingRight: 5, overflow: 'hidden' }}>
+            <div style={{ color: racer.color, fontWeight: 'bold', fontSize: '0.8rem', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              🐎 {racer.name.split(' ')[0]}
+            </div>
+            {racer.name.split(' ').length > 1 && (
+              <div style={{ color: racer.color + '77', fontSize: '0.6rem', lineHeight: 1 }}>
+                {racer.name.split(' ').slice(1).join(' ')}
+              </div>
+            )}
+          </div>
+
+          {BET_TYPE_ORDER.map((betType, gi) => {
+            const def = BET_TYPES[betType];
+            return (
+              <div key={betType} style={{ flex: def.slots.length, display: 'flex', gap: CELL_GAP, marginRight: gi < BET_TYPE_ORDER.length - 1 ? GRP_GAP : 0 }}>
+                {def.slots.map((slot, slotIndex) => {
+                  const key   = `${racer.id}_${betType}`;
+                  const myBet = myBets?.[key];
+                  const isMine = myBet?.slotIndex === slotIndex;
+                  return (
+                    <ResultCell
+                      key={slotIndex}
+                      betType={betType}
+                      odds={slot.odds}
+                      loss={slot.loss}
+                      myBet={isMine ? myBet : null}
+                      result={isMine ? betResults?.[key] : null}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Bets off popup ───────────────────────────────────────────────────────────
+function BetsOffPopup({ show }) {
+  if (!show) return null;
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 950, display: 'flex',
+      alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+    }}>
+      <div style={{
+        background: 'rgba(20,0,0,0.96)', border: '3px solid #f44336', borderRadius: 18,
+        padding: '1.4rem 3rem', textAlign: 'center',
+        boxShadow: '0 0 40px #f4433688',
+        animation: 'betsOffPop 0.25s ease',
+      }}>
+        <div style={{ fontSize: '2rem', lineHeight: 1 }}>🔒</div>
+        <div style={{ color: '#f44336', fontWeight: 'bold', fontSize: '2rem', letterSpacing: 3, textTransform: 'uppercase', marginTop: 4 }}>
+          Bets are off!
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Side bet panel ───────────────────────────────────────────────────────────
+function SideBetPanel({ sideBets, sideBetOccupants, mySideBets, held, usedChips, betsLocked, mySocketId, onPlace }) {
+  if (!sideBets?.length) return null;
+
+  return (
+    <div style={{ background: '#07100f', border: '2px solid #1a3a2a', borderRadius: 12, padding: '0.5rem 0.6rem', marginTop: '0.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <span style={{ color: '#3a7a5a', fontWeight: 'bold', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: 2 }}>
+          Side Bets
+        </span>
+        {betsLocked
+          ? <span style={{ fontSize: '0.75rem', color: '#f44336', fontWeight: 'bold' }}>🔒 Locked</span>
+          : held != null
+            ? <span style={{ fontSize: '0.75rem', color: '#f5c518' }}>Tap a side bet — <strong>{held}</strong>-chip</span>
+            : <span style={{ fontSize: '0.75rem', color: '#3a7a5a' }}>Pick a chip, then tap a side bet</span>
+        }
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {sideBets.map((sb) => {
+          const occupants = sideBetOccupants[sb.id] ?? [];
+          const myBet     = mySideBets[sb.id];
+          const isMine    = !!myBet;
+          const isFull    = occupants.length >= 3 && !isMine;
+          const chipUsed  = held != null && usedChips.has(held);
+          const canPlace  = !betsLocked && !isMine && !isFull && held != null && !chipUsed;
+
+          const borderColor = isMine   ? '#4caf50'
+                            : canPlace ? '#f5c518'
+                            : isFull   ? '#2a2a2a'
+                                       : '#1a3a2a';
+          const bgColor     = isMine   ? '#0a200a'
+                            : canPlace ? '#1a1200'
+                            : isFull   ? '#0a0a0a'
+                                       : '#0a1510';
+
+          return (
+            <div
+              key={sb.id}
+              onClick={() => canPlace && onPlace(sb.id, held)}
+              style={{
+                border: `2px solid ${borderColor}`, background: bgColor,
+                borderRadius: 9, padding: '0.5rem 0.65rem',
+                cursor: canPlace ? 'pointer' : 'default',
+                boxShadow: canPlace ? `0 0 10px #f5c51833` : isMine ? `0 0 10px #4caf5033` : 'none',
+                opacity: isFull ? 0.45 : 1,
+                transition: 'border-color 0.12s, background 0.12s',
+                display: 'flex', alignItems: 'center', gap: '0.6rem',
+              }}
+            >
+              {/* Description + odds */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.78rem', color: isMine ? '#4caf50' : isFull ? '#444' : '#ccc', fontWeight: isMine ? 'bold' : 'normal', lineHeight: 1.3 }}>
+                  {sb.description}
+                </div>
+                <div style={{ fontSize: '0.65rem', color: '#555', marginTop: 2 }}>
+                  <span style={{ color: '#4caf50' }}>{sb.odds}×</span>
+                  {sb.loss > 0 && <span style={{ color: '#c0392b' }}> / -{sb.loss}</span>}
+                  {isFull && <span style={{ color: '#444', marginLeft: 6 }}>FULL</span>}
+                </div>
+              </div>
+
+              {/* Chip slots — up to 3 */}
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                {[0, 1, 2].map((i) => {
+                  const occ   = occupants[i];
+                  const isMe  = occ?.playerId === mySocketId;
+                  const filled = !!occ;
+                  return (
+                    <div key={i} style={{
+                      width: 28, height: 28, borderRadius: '50%',
+                      background: filled ? (isMe ? '#4caf50' : '#2a2a2a') : 'transparent',
+                      border: `2px solid ${filled ? (isMe ? '#4caf50' : '#444') : '#1a3a2a'}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '0.65rem', fontWeight: 'bold',
+                      color: filled ? (isMe ? '#fff' : '#888') : 'transparent',
+                    }}>
+                      {filled ? occ.amount : ''}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Side bet results (shown in PlayerResult) ─────────────────────────────────
+function SideBetResults({ sideBets, mySideBets, sideBetResults }) {
+  const entries = Object.entries(mySideBets ?? {});
+  if (!entries.length) return null;
+
+  return (
+    <div style={{ width: '100%', maxWidth: 600 }}>
+      <div style={{ color: '#555', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 6 }}>Side Bets</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {entries.map(([id, bet]) => {
+          const result  = sideBetResults?.[id];
+          const sb      = sideBets?.find((s) => s.id === id);
+          const won     = result?.won ?? false;
+          const glow    = won ? '#4caf50' : '#f44336';
+          return (
+            <div key={id} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              border: `2px solid ${glow}`, background: glow + '18',
+              borderRadius: 9, padding: '0.45rem 0.75rem',
+              boxShadow: `0 0 10px ${glow}44`,
+            }}>
+              <div style={{
+                width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                background: glow, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.65rem', fontWeight: 'bold', color: '#fff',
+              }}>
+                {bet.amount}
+              </div>
+              <div style={{ flex: 1, fontSize: '0.8rem', color: won ? '#4caf50' : '#ccc' }}>
+                {sb?.description ?? id}
+              </div>
+              <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: glow }}>
+                {won ? `+${result.collect}` : result?.lost > 0 ? `-${result.lost}` : '±0'}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Host podium ──────────────────────────────────────────────────────────────
+function Podium({ payouts, racers, winner, raceId, totalRaces, isLastRace, onNewRace, onEndSession }) {
+  if (!payouts?.length) return null;
+  const sorted   = [...payouts].sort((a, b) => b.finalTokens - a.finalTokens);
+  const medals   = ['🥇', '🥈', '🥉'];
+  const winRacer = winner ? racers.find((r) => r.id === winner.id) : null;
+
+  return (
+    <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
+      {winRacer && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ fontSize: '3rem' }}>🏆</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: winRacer.color, marginTop: '0.5rem' }}>
+            {winRacer.name} wins!
+          </div>
+          <div style={{ fontSize: '0.9rem', color: '#555', marginTop: '0.5rem', textTransform: 'uppercase', letterSpacing: 2 }}>
+            Race {raceId} of {totalRaces}
+          </div>
+        </div>
+      )}
+
+      <h2 style={{ color: '#888', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: 2, marginBottom: '1.5rem' }}>
+        {isLastRace ? 'Final Standings' : 'Standings'}
+      </h2>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 480, margin: '0 auto' }}>
+        {sorted.map((p, i) => (
+          <div key={p.playerId} style={{
+            display: 'flex', alignItems: 'center', gap: 16,
+            padding: '0.75rem 1.25rem', borderRadius: 10,
+            background: i === 0 ? '#1a1600' : '#111',
+            border: `1px solid ${i === 0 ? '#f5c51888' : '#222'}`,
+            fontSize: '1.1rem',
+          }}>
+            <span style={{ fontSize: '1.5rem', width: 32 }}>{medals[i] ?? `${i + 1}.`}</span>
+            <span style={{ flex: 1, fontWeight: 'bold', color: i === 0 ? '#f5c518' : '#ccc' }}>{p.playerName}</span>
+            <span style={{ color: p.delta > 0 ? '#4caf50' : p.delta < 0 ? '#f44336' : '#666', fontWeight: 'bold' }}>
+              {p.delta > 0 ? `+${p.delta}` : p.delta < 0 ? String(p.delta) : '±0'}
+            </span>
+            <span style={{ color: '#f5c518', fontWeight: 'bold' }}>{p.finalTokens} 💰</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: '2.5rem', display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+        {isLastRace ? (
+          <>
+            <button onClick={onEndSession} style={{ fontSize: '1.1rem', padding: '0.75rem 2.5rem' }}>
+              End Session
+            </button>
+            <button onClick={onNewRace} style={{ fontSize: '0.95rem', padding: '0.6rem 1.5rem', background: '#1a1a1a', color: '#666', border: '1px solid #333' }}>
+              Play Another Race
+            </button>
+          </>
+        ) : (
+          <button onClick={onNewRace} style={{ fontSize: '1.1rem', padding: '0.75rem 2.5rem' }}>
+            Next Race →
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Player result overlay ────────────────────────────────────────────────────
+function PlayerResult({ myPayout, racers, sideBets, raceId, totalRaces, onDismiss }) {
+  if (!myPayout) return null;
+  const won          = myPayout.delta > 0;
+  const lost         = myPayout.delta < 0;
+  const hasBets      = Object.keys(myPayout.bets ?? {}).length > 0;
+  const hasSideBets  = Object.keys(myPayout.sideBets ?? {}).length > 0;
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: won ? 'rgba(0,40,0,0.97)' : lost ? 'rgba(50,0,0,0.97)' : 'rgba(10,10,10,0.97)',
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      overflowY: 'auto', padding: '2rem 0.75rem 1.5rem',
+      gap: '0.75rem',
+    }}>
+      <div style={{ fontSize: '0.8rem', color: '#555', textTransform: 'uppercase', letterSpacing: 2 }}>
+        Race {raceId} of {totalRaces}
+      </div>
+      <div style={{ fontSize: '4rem' }}>{won ? '🎉' : lost ? '😬' : '🤷'}</div>
+      <div style={{ fontSize: '4rem', fontWeight: 'bold', lineHeight: 1, color: won ? '#4caf50' : lost ? '#f44336' : '#888' }}>
+        {won ? `+${myPayout.delta}` : lost ? String(myPayout.delta) : '±0'}
+      </div>
+      <div style={{ fontSize: '1.1rem', color: '#aaa' }}>
+        New total: <strong style={{ color: '#f5c518' }}>{myPayout.finalTokens} 💰</strong>
+      </div>
+
+      {hasBets && (
+        <div style={{ width: '100%', maxWidth: 600, marginTop: '0.5rem' }}>
+          <ResultGrid
+            racers={racers}
+            myBets={myPayout.bets}
+            betResults={myPayout.betResults}
+          />
+        </div>
+      )}
+
+      {hasSideBets && (
+        <SideBetResults
+          sideBets={sideBets}
+          mySideBets={myPayout.sideBets}
+          sideBetResults={myPayout.sideBetResults}
+        />
+      )}
+
+      <button onClick={onDismiss} style={{ marginTop: '0.75rem', background: '#222', color: '#aaa', border: '1px solid #444' }}>
+        See Standings
+      </button>
+    </div>
+  );
+}
+
+// ─── Player standings — shown after dismissing result ─────────────────────────
+function PlayerStandings({ payouts, mySocketId, isLastRace }) {
+  if (!payouts?.length) return null;
+  const sorted = [...payouts].sort((a, b) => b.finalTokens - a.finalTokens);
+  const medals = ['🥇', '🥈', '🥉'];
+
+  return (
+    <div style={{ padding: '0.5rem 0' }}>
+      <h3 style={{ color: '#888', textTransform: 'uppercase', letterSpacing: 2, fontSize: '0.8rem', textAlign: 'center', margin: '0 0 0.75rem' }}>
+        {isLastRace ? 'Final Standings' : 'Standings'}
+      </h3>
+      {!isLastRace && (
+        <p style={{ color: '#555', textAlign: 'center', fontSize: '0.82rem', margin: '0 0 1rem' }}>
+          Waiting for the host to start the next race…
+        </p>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {sorted.map((p, i) => {
+          const isMe = p.playerId === mySocketId;
+          return (
+            <div key={p.playerId} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '0.55rem 0.9rem', borderRadius: 8,
+              background: isMe ? '#1a1600' : '#111',
+              border: `1px solid ${isMe ? '#f5c51888' : '#222'}`,
+            }}>
+              <span style={{ fontSize: '1.1rem', width: 26 }}>{medals[i] ?? `${i + 1}.`}</span>
+              <span style={{ flex: 1, fontWeight: isMe ? 'bold' : 'normal', color: isMe ? '#f5c518' : '#ccc', fontSize: '0.88rem' }}>
+                {p.playerName}{isMe ? ' (you)' : ''}
+              </span>
+              <span style={{ color: p.delta > 0 ? '#4caf50' : p.delta < 0 ? '#f44336' : '#666', fontSize: '0.82rem' }}>
+                {p.delta > 0 ? `+${p.delta}` : p.delta < 0 ? String(p.delta) : '±0'}
+              </span>
+              <span style={{ color: '#f5c518', fontWeight: 'bold', fontSize: '0.88rem' }}>{p.finalTokens} 💰</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Game component ──────────────────────────────────────────────────────
+export default function Game({
+  roomCode, racers, mySocketId, baseDeck,
+  players: initialPlayers, initialTurnData, initialDraftOptions,
+  startingTokens, isHost, raceId, totalRaces, trackLength, sideBets,
+}) {
+  const [turnData, setTurnData]               = useState(initialTurnData ?? null);
+  const [myOptions, setMyOptions]             = useState(initialDraftOptions ?? null);
+  const [draftDone, setDraftDone]             = useState(false);
+  const [gamePhase, setGamePhase]             = useState('drafting');
+  const [raceState, setRaceState]             = useState(null);
+  const [raceLog, setRaceLog]                 = useState([]);
+  const [winner, setWinner]                   = useState(null);
+  const [pulsingRacer, setPulsingRacer]       = useState(null);
+  const [racePrep, setRacePrep]               = useState(null);
+  const [toasts, setToasts]                   = useState([]);
+  const [tokens, setTokens]                   = useState(startingTokens ?? 10);
+  const [myBets, setMyBets]                   = useState({});
+  const [mySideBets, setMySideBets]           = useState({});
+  const [sideBetOccupants, setSideBetOccupants] = useState({});
+  const [betsLocked, setBetsLocked]           = useState(false);
+  const [showBetsOff, setShowBetsOff]         = useState(false);
+  const [betSummary, setBetSummary]           = useState(null);
+  const [payouts, setPayouts]                 = useState(null);
+  const [heldChip, setHeldChip]               = useState(null);
+  const [showResult, setShowResult]           = useState(false);
+
+  const isLastRace    = raceId >= totalRaces;
+  const [deckExpanded, setDeckExpanded] = useState(false);
+
+  useEffect(() => {
+    if (betsLocked) {
+      setShowBetsOff(true);
+      const t = setTimeout(() => setShowBetsOff(false), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [betsLocked]);
+
+  useEffect(() => {
+    const onTurnUpdate    = (data) => { setTurnData(data); setMyOptions(null); };
+    const onDraftOptions  = ({ options }) => setMyOptions(options);
+    const onDraftComplete = ({ completedPlayers }) => {
+      setTurnData((prev) => prev ? { ...prev, completedPlayers } : prev);
+      setDraftDone(true);
+      setMyOptions(null);
+    };
+
+    const onRaceStarting = ({ deckSize }) => {
+      setGamePhase('racing');
+      setRacePrep({ phase: 'shuffling', deckSize });
+      setTimeout(() => setRacePrep({ phase: 'countdown', number: 3 }), 1100);
+      setTimeout(() => setRacePrep({ phase: 'countdown', number: 2 }), 2100);
+      setTimeout(() => setRacePrep({ phase: 'countdown', number: 1 }), 3100);
+      setTimeout(() => setRacePrep({ phase: 'go' }),                    4000);
+      setTimeout(() => setRacePrep(null),                                4500);
+    };
+
+    const onRaceUpdate = ({ racerStates, card, description, movedRacerId, betsLocked: locked, betSummary: summary }) => {
+      setRaceState(racerStates);
+      setRaceLog((prev) => [...prev, { card, description }].slice(-60));
+      setGamePhase('racing');
+      if (locked)  setBetsLocked(true);
+      if (summary) setBetSummary(summary);
+
+      if (movedRacerId != null) {
+        setPulsingRacer(movedRacerId);
+        setTimeout(() => setPulsingRacer(null), 350);
+      }
+
+      const duration = 2400;
+      const toast = {
+        id: `${Date.now()}-${Math.random()}`, card,
+        shortDesc: description.replace(/^[^—–-]+[—–-]\s*/, '').replace(/^[^:]+:\s*/, '') || actionLabel(card),
+        x: 8 + Math.random() * 58, y: 8 + Math.random() * 58, duration,
+      };
+      setToasts((prev) => [...prev, toast]);
+      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toast.id)), duration);
+    };
+
+    const onOddsUpdate      = ({ betSummary: summary, betsLocked: locked }) => {
+      if (summary) setBetSummary(summary);
+      if (locked)  setBetsLocked(true);
+    };
+    const onBetConfirmed    = ({ bets, tokens: t, sideBets: sb }) => {
+      setMyBets(bets ?? {});
+      setTokens(t);
+      if (sb) setMySideBets(sb);
+    };
+    const onSideBetsUpdate  = ({ sideBetSummary }) => {
+      if (sideBetSummary?.occupants) setSideBetOccupants(sideBetSummary.occupants);
+    };
+
+    const onRaceFinished = ({ winner: w, racerStates, payouts: p, betSummary: summary }) => {
+      setRaceState(racerStates);
+      setWinner(w);
+      setGamePhase('finished');
+      if (p)       { setPayouts(p); if (!isHost) setShowResult(true); }
+      if (summary) setBetSummary(summary);
+    };
+
+    socket.on('turn_update',      onTurnUpdate);
+    socket.on('draft_options',    onDraftOptions);
+    socket.on('draft_complete',   onDraftComplete);
+    socket.on('race_starting',    onRaceStarting);
+    socket.on('race_update',      onRaceUpdate);
+    socket.on('odds_update',      onOddsUpdate);
+    socket.on('bet_confirmed',    onBetConfirmed);
+    socket.on('side_bets_update', onSideBetsUpdate);
+    socket.on('race_finished',    onRaceFinished);
+
+    return () => {
+      socket.off('turn_update',      onTurnUpdate);
+      socket.off('draft_options',    onDraftOptions);
+      socket.off('draft_complete',   onDraftComplete);
+      socket.off('race_starting',    onRaceStarting);
+      socket.off('race_update',      onRaceUpdate);
+      socket.off('odds_update',      onOddsUpdate);
+      socket.off('bet_confirmed',    onBetConfirmed);
+      socket.off('side_bets_update', onSideBetsUpdate);
+      socket.off('race_finished',    onRaceFinished);
+    };
+  }, [isHost]);
+
+  function handleSelectCard(cardIndex) {
+    socket.emit('select_card', { roomCode, cardIndex });
+    setMyOptions(null);
+  }
+
+  function handlePlaceChip(racerId, betType, slotIndex, amount) {
+    socket.emit('place_chip', { roomCode, racerId, betType, slotIndex, amount });
+    setHeldChip(null);
+  }
+
+  function handlePlaceSideBet(sideBetId, amount) {
+    socket.emit('place_side_bet', { roomCode, sideBetId, amount });
+    setHeldChip(null);
+  }
+
+  // Chips are free each race — track which denominations have already been placed (main + side bets)
+  const usedChips = new Set([
+    ...Object.values(myBets).map((b) => b.amount),
+    ...Object.values(mySideBets).map((b) => b.amount),
+  ]);
+
+  const myPayout = payouts?.find((p) => p.playerId === mySocketId) ?? null;
+
+  // ── Host / TV display ───────────────────────────────────────────────────────
+  if (isHost) {
+    return (
+      <>
+        <RaceCountdown prep={racePrep} />
+        <ToastLayer toasts={toasts} racers={racers} />
+
+        <div style={{ minHeight: '100vh', background: '#0a0a0a', padding: '1.5rem' }}>
+          <div style={{ maxWidth: 800, margin: '0 auto' }}>
+
+            <div style={s.header}>
+              <h1 style={{ margin: 0, fontSize: '1.6rem', color: '#f5c518', letterSpacing: 2 }}>Race Your Bets</h1>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ color: '#555', fontSize: '0.8rem' }}>Race {raceId}/{totalRaces}</span>
+                <span style={s.roomBadge}>{roomCode}</span>
+              </div>
+            </div>
+
+            {/* Draft status */}
+            {gamePhase === 'drafting' && (
+              <div style={{ ...s.section, textAlign: 'center', padding: '2rem' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>🎴</div>
+                <h2 style={{ color: '#f5c518', margin: '0 0 0.5rem' }}>Draft in Progress</h2>
+                {draftDone ? (
+                  <>
+                    <p style={{ color: '#4caf50', marginBottom: '1.5rem' }}>All players have chosen their card!</p>
+                    <button onClick={() => socket.emit('start_race', { roomCode })} style={{ fontSize: '1.1rem', padding: '0.75rem 2rem' }}>
+                      Start Race
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p style={{ color: '#aaa', fontSize: '1.1rem' }}>{turnData?.currentPlayerName} is choosing…</p>
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: '1rem' }}>
+                      {initialPlayers.map((p) => {
+                        const done = turnData?.completedPlayers?.includes(p.name);
+                        const cur  = p.name === turnData?.currentPlayerName;
+                        return (
+                          <span key={p.id} style={{
+                            padding: '4px 14px', borderRadius: 20, fontSize: '0.85rem',
+                            background: done ? '#1b3a1b' : cur ? '#2a2200' : '#1a1a1a',
+                            border: `1px solid ${done ? '#4caf50' : cur ? '#f5c518' : '#333'}`,
+                            color: done ? '#4caf50' : cur ? '#f5c518' : '#666',
+                          }}>
+                            {done ? '✓ ' : cur ? '◆ ' : ''}{p.name}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Race track */}
+            {(gamePhase === 'racing' || gamePhase === 'finished') && (
+              <div style={s.section}>
+                {gamePhase === 'finished' && winner && (
+                  <div style={{ ...s.banner, borderColor: racerById(winner.id, racers).color, marginBottom: '1rem' }}>
+                    <span style={{ fontSize: '1.5rem' }}>🏆</span>
+                    <strong style={{ color: racerById(winner.id, racers).color, fontSize: '1.1rem' }}>{winner.name} wins!</strong>
+                  </div>
+                )}
+                <RaceTrack racers={racers} raceState={raceState} pulsingRacer={pulsingRacer} trackLength={trackLength ?? 10} />
+              </div>
+            )}
+
+            {/* Podium */}
+            {gamePhase === 'finished' && payouts && (
+              <div style={s.section}>
+                <Podium
+                  payouts={payouts}
+                  racers={racers}
+                  winner={winner}
+                  raceId={raceId}
+                  totalRaces={totalRaces}
+                  isLastRace={isLastRace}
+                  onNewRace={() => socket.emit('new_race', { roomCode })}
+                  onEndSession={() => socket.emit('end_game', { roomCode })}
+                />
+              </div>
+            )}
+
+            {/* Race log — shown during/after race, directly below the track */}
+            {raceLog.length > 0 && (gamePhase === 'racing' || gamePhase === 'finished') && (
+              <div style={s.section}><RaceLog log={raceLog} racers={racers} /></div>
+            )}
+
+            {/* Deck info — always shown during drafting; collapsible during racing */}
+            {gamePhase === 'drafting' && (
+              <>
+                <div style={s.section}><DeckDistribution deck={baseDeck} racers={racers} /></div>
+                <div style={s.section}><DeckGrid deck={baseDeck} racers={racers} /></div>
+              </>
+            )}
+            {gamePhase === 'racing' && (
+              <div style={s.section}>
+                <button
+                  onClick={() => setDeckExpanded((v) => !v)}
+                  style={{ background: 'none', border: '1px solid #2a2a2a', color: '#555', borderRadius: 6, padding: '6px 16px', cursor: 'pointer', fontSize: '0.8rem', width: '100%' }}
+                >
+                  {deckExpanded ? '▲ Hide Deck Info' : '▼ Show Deck Info'}
+                </button>
+                {deckExpanded && (
+                  <div style={{ marginTop: '1rem' }}>
+                    <DeckDistribution deck={baseDeck} racers={racers} />
+                    <div style={{ marginTop: '1rem' }}><DeckGrid deck={baseDeck} racers={racers} /></div>
+                  </div>
+                )}
+              </div>
+            )}
+
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // ── Player / phone view ─────────────────────────────────────────────────────
+  return (
+    <>
+      <BetsOffPopup show={showBetsOff} />
+
+      {showResult && myPayout && (
+        <PlayerResult
+          myPayout={myPayout}
+          racers={racers}
+          sideBets={sideBets}
+          raceId={raceId}
+          totalRaces={totalRaces}
+          onDismiss={() => setShowResult(false)}
+        />
+      )}
+
+      {gamePhase === 'racing' && !betsLocked && !showResult && (
+        <ChipTray
+          held={heldChip}
+          usedChips={usedChips}
+          tokens={tokens}
+          onSelect={(v) => setHeldChip(v)}
+          onClear={() => setHeldChip(null)}
+        />
+      )}
+
+      {/* Compact header — always visible */}
+      <div style={{ padding: '0.6rem 0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ color: '#f5c518', fontWeight: 'bold', fontSize: '1rem' }}>Race Your Bets</span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ color: '#555', fontSize: '0.78rem' }}>{raceId}/{totalRaces}</span>
+          <span style={{ color: '#f5c518', fontSize: '0.85rem' }}>💰 {tokens}</span>
+          <span style={s.roomBadge}>{roomCode}</span>
+        </div>
+      </div>
+
+      {/* Draft phase */}
+      {gamePhase === 'drafting' && (
+        <div style={{ padding: '0.75rem', maxWidth: 520, margin: '0 auto' }}>
+          <DraftPanel
+            turnData={turnData}
+            myOptions={myOptions}
+            players={initialPlayers}
+            racers={racers}
+            mySocketId={mySocketId}
+            onSelectCard={handleSelectCard}
+            draftDone={draftDone}
+          />
+          {draftDone && (
+            <p style={{ color: '#888', textAlign: 'center', marginTop: '1rem', fontSize: '0.9rem' }}>
+              Waiting for the host to start the race…
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Betting grid + side bets — full viewport width, no maxWidth cap */}
+      {gamePhase === 'racing' && !showResult && (
+        <div style={{ padding: '0.5rem 0.4rem 90px' }}>
+          <BettingGrid
+            racers={racers}
+            myBets={myBets}
+            betSummary={betSummary}
+            betsLocked={betsLocked}
+            held={heldChip}
+            usedChips={usedChips}
+            onPlace={handlePlaceChip}
+          />
+          <SideBetPanel
+            sideBets={sideBets}
+            sideBetOccupants={sideBetOccupants}
+            mySideBets={mySideBets}
+            held={heldChip}
+            usedChips={usedChips}
+            betsLocked={betsLocked}
+            mySocketId={mySocketId}
+            onPlace={handlePlaceSideBet}
+          />
+        </div>
+      )}
+
+      {/* Post-race standings */}
+      {gamePhase === 'finished' && !showResult && (
+        <div style={{ padding: '0.75rem', maxWidth: 520, margin: '0 auto' }}>
+          <PlayerStandings
+            payouts={payouts}
+            mySocketId={mySocketId}
+            isLastRace={isLastRace}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const s = {
+  page:      { padding: '1rem', paddingBottom: '90px' },
+  header:    { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' },
+  roomBadge: { background: '#0f0f0f', border: '2px solid #f5c518', color: '#f5c518', padding: '4px 12px', borderRadius: 6, fontWeight: 'bold', letterSpacing: 4, fontSize: '0.9rem' },
+  section:   { marginBottom: '1.5rem' },
+  label:     { color: '#666', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: 1, marginBottom: '0.6rem', marginTop: 0 },
+  banner:    { display: 'flex', alignItems: 'center', gap: '0.75rem', background: '#0f0f0f', border: '1px solid #333', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '0.75rem' },
+};
