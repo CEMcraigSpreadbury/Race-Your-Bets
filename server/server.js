@@ -122,13 +122,13 @@ function generateSideBets(racers) {
 function generateBaseDeck(racers) {
   const deck = [];
   for (const racer of racers) {
-    for (let i = 0; i < 2; i++) deck.push({ type: 'move', value: 1, racerId: racer.id });
-    for (let i = 0; i < 4; i++) deck.push({ type: 'move', value: 2, racerId: racer.id });
+    for (let i = 0; i < 1; i++) deck.push({ type: 'move', value: 1, racerId: racer.id });
+    for (let i = 0; i < 2; i++) deck.push({ type: 'move', value: 2, racerId: racer.id });
   }
   const specialTypes = [
-    'boost', 'boost', 'boost', 'boost',
-    'stumble', 'stumble', 'stumble', 'stumble',
-    'double', 'double', 'double', 'double',
+    'boost', 'boost',
+    'stumble', 'stumble',
+    'double', 'double',
   ];
   for (const type of specialTypes) {
     deck.push({ type, racerId: randomFrom(racers).id });
@@ -158,6 +158,19 @@ function defaultSettings() {
     trackLength: 10,
     horses: RACER_POOL.slice(0, 5).map((r) => ({ id: r.id, name: r.name, color: r.color })),
   };
+}
+
+// ─── Sponsorship helpers ──────────────────────────────────────────────────────
+// Return = floor( investment × 2 × (K − rank) / K )
+// Profit when rank < K/2, loss when rank > K/2, total loss at last place.
+function calcSponsorReturn(investment, rank, numHorses) {
+  return Math.floor(investment * 2 * (numHorses - rank) / numHorses);
+}
+
+function buildSponsorList(room) {
+  return Object.entries(room.sponsorships ?? {}).map(([playerId, s]) => ({
+    playerId, playerName: s.playerName, racerId: s.racerId, racerName: s.racerName, amount: s.amount,
+  }));
 }
 
 // ─── Bet summaries ────────────────────────────────────────────────────────────
@@ -219,7 +232,7 @@ function beginGame(roomCode, preserveTokens = false) {
   room.currentTurnIndex = 0;
   room.completedPlayers = [];
   room.currentOptions   = generateCardOptions(racers);
-  room.betsLocked       = false;
+  room.lockedRacers     = new Set();
   room.raceId           = (room.raceId ?? 0) + 1;
 
   room.players.forEach((p) => {
@@ -228,22 +241,24 @@ function beginGame(roomCode, preserveTokens = false) {
     p.sideBets = {};
   });
 
+  room.sponsorships = {};
   room.sideBets     = generateSideBets(racers);
   room.sideBetSlots = {};
   for (const sb of room.sideBets) room.sideBetSlots[sb.id] = [];
 
   const firstPlayer  = room.players[0];
   const turnData     = { currentTurnIndex: 0, currentPlayerName: firstPlayer.name, completedPlayers: [] };
-  const betTypes     = { win: { label: 'WIN', slots: [{ odds: 7, loss: 2 }, { odds: 5, loss: 2 }, { odds: 3, loss: 1 }] }, place: { label: 'PLACE', slots: [{ odds: 4, loss: 1 }, { odds: 2, loss: 1 }] }, show: { label: 'SHOW', slots: [{ odds: 2, loss: 1 }, { odds: 2, loss: 0 }] } };
-  const trackLength  = room.trackLength ?? 10;
+  const betTypes       = { win: { label: 'WIN', slots: [{ odds: 7, loss: 2 }, { odds: 5, loss: 2 }, { odds: 3, loss: 1 }] }, place: { label: 'PLACE', slots: [{ odds: 4, loss: 1 }, { odds: 2, loss: 1 }] }, show: { label: 'SHOW', slots: [{ odds: 2, loss: 1 }, { odds: 2, loss: 0 }] } };
+  const trackLength    = room.trackLength ?? 10;
   const publicSideBets = room.sideBets.map(({ id, type, description, horseIds, odds, loss }) => ({ id, type, description, horseIds, odds, loss }));
+  const sponsorships   = buildSponsorList(room);
 
   console.log(`[Room ${roomCode}] Race #${room.raceId}/${room.totalRaces} — ${racers.length} horses, ${room.baseDeck.length} cards, ${publicSideBets.length} side bets`);
 
   io.to(room.hostId).emit('game_started', {
     roomCode, racers, baseDeck: room.baseDeck, players: room.players, turnData,
     isHost: true, raceId: room.raceId, totalRaces: room.totalRaces,
-    trackLength, startingTokens: STARTING_TOKENS, betTypes, sideBets: publicSideBets,
+    trackLength, startingTokens: STARTING_TOKENS, betTypes, sideBets: publicSideBets, sponsorships,
   });
 
   room.players.forEach((p) => {
@@ -251,7 +266,7 @@ function beginGame(roomCode, preserveTokens = false) {
       roomCode, racers, baseDeck: room.baseDeck, players: room.players, turnData,
       draftOptions: p.id === firstPlayer.id ? room.currentOptions : null,
       isHost: false, raceId: room.raceId, totalRaces: room.totalRaces,
-      trackLength, startingTokens: p.tokens, betTypes, sideBets: publicSideBets,
+      trackLength, startingTokens: p.tokens, betTypes, sideBets: publicSideBets, sponsorships,
     });
   });
 
@@ -275,7 +290,7 @@ function startRace(roomCode) {
   room.raceInterval = setInterval(() => {
     if (!rooms[roomCode]) { clearInterval(room.raceInterval); return; }
     flipNextCard(roomCode);
-  }, 1500);
+  }, room.cardInterval ?? 1500);
 }
 
 function flipNextCard(roomCode) {
@@ -326,11 +341,12 @@ function flipNextCard(roomCode) {
     racerStates[id] = { position: state.position, status: state.skipNext ? 'stumbled' : 'active' };
   }
 
-  if (!room.betsLocked) {
-    const lockPos = (room.trackLength ?? 10) * BET_LOCK_PCT;
-    if (Object.values(room.racerStates).some((r) => r.position >= lockPos)) {
-      room.betsLocked = true;
-      console.log(`[Room ${roomCode}] Bets locked`);
+  const lockPos = (room.trackLength ?? 10) * BET_LOCK_PCT;
+  for (const [id, state] of Object.entries(room.racerStates)) {
+    const numId = Number(id);
+    if (state.position >= lockPos && !room.lockedRacers.has(numId)) {
+      room.lockedRacers.add(numId);
+      console.log(`[Room ${roomCode}] Bets locked for racer ${numId}`);
     }
   }
 
@@ -340,7 +356,7 @@ function flipNextCard(roomCode) {
     card, description, racerStates,
     cardsRemaining: room.deck.length - room.deckIndex,
     movedRacerId:   card.type === 'move' && !wasStumbled ? card.racerId : null,
-    betsLocked:     room.betsLocked,
+    lockedRacers:   [...room.lockedRacers],
     betSummary,
   });
 
@@ -406,8 +422,17 @@ function endRace(roomCode, winner = null) {
       }
     }
 
+    // Sponsorship return (investment already deducted from tokens when placed)
+    let sponsorResult = null;
+    const sponsorship = room.sponsorships?.[p.id];
+    if (sponsorship) {
+      const returned = calcSponsorReturn(sponsorship.amount, rankOf(sponsorship.racerId), room.racers.length);
+      delta += returned;
+      sponsorResult = { racerId: sponsorship.racerId, racerName: sponsorship.racerName, amount: sponsorship.amount, returned, net: returned - sponsorship.amount };
+    }
+
     const finalTokens = Math.max(0, (p.tokens ?? STARTING_TOKENS) + delta);
-    payouts.push({ playerId: p.id, playerName: p.name, bets: p.bets, betResults, sideBets: p.sideBets ?? {}, sideBetResults, delta, finalTokens });
+    payouts.push({ playerId: p.id, playerName: p.name, bets: p.bets, betResults, sideBets: p.sideBets ?? {}, sideBetResults, sponsorResult, delta, finalTokens });
     p.tokens = finalTokens;
   }
 
@@ -478,20 +503,23 @@ io.on('connection', (socket) => {
     const room = rooms[roomCode];
     if (!room || socket.id !== room.hostId) return;
 
-    const validLengths = [10, 15, 20];
-    const numHorses    = Math.max(3, Math.min(8, settings?.numHorses ?? 5));
+    const validLengths   = [10, 15, 20];
+    const validIntervals = [800, 1500, 3000];
+    const numHorses      = Math.max(3, Math.min(8, settings?.numHorses ?? 5));
     room.settings = {
-      totalRaces:  Math.max(1, Math.min(10, settings?.totalRaces ?? 3)),
-      trackLength: validLengths.includes(settings?.trackLength) ? settings.trackLength : 10,
+      totalRaces:    Math.max(1, Math.min(10, settings?.totalRaces ?? 3)),
+      trackLength:   validLengths.includes(settings?.trackLength) ? settings.trackLength : 10,
+      cardInterval:  validIntervals.includes(settings?.cardInterval) ? settings.cardInterval : 1500,
       horses: RACER_POOL.slice(0, numHorses).map((r, i) => ({
         id:    r.id,
         name:  ((settings?.horseNames?.[i] ?? '').trim()) || r.name,
         color: r.color,
       })),
     };
-    room.racers      = room.settings.horses;
-    room.totalRaces  = room.settings.totalRaces;
-    room.trackLength = room.settings.trackLength;
+    room.racers       = room.settings.horses;
+    room.totalRaces   = room.settings.totalRaces;
+    room.trackLength  = room.settings.trackLength;
+    room.cardInterval = room.settings.cardInterval;
     room.raceId      = 0;
 
     beginGame(roomCode, false);
@@ -551,7 +579,7 @@ io.on('connection', (socket) => {
   socket.on('place_chip', ({ roomCode, racerId, betType, slotIndex, amount }) => {
     const room = rooms[roomCode];
     if (!room || room.state !== 'racing') return;
-    if (room.betsLocked) { socket.emit('bet_error', { message: 'Bets are locked.' }); return; }
+    if (room.lockedRacers.has(Number(racerId))) { socket.emit('bet_error', { message: 'Bets are locked for that horse.' }); return; }
 
     const player = room.players.find((p) => p.id === socket.id);
     if (!player) return;
@@ -575,14 +603,14 @@ io.on('connection', (socket) => {
 
     const betSummary = buildBetSummary(room);
     socket.emit('bet_confirmed', { bets: player.bets, tokens: player.tokens, sideBets: player.sideBets ?? {} });
-    io.to(roomCode).emit('odds_update', { betSummary, betsLocked: room.betsLocked });
+    io.to(roomCode).emit('odds_update', { betSummary, lockedRacers: [...room.lockedRacers] });
     console.log(`[Room ${roomCode}] ${player.name}: ${amount}-chip on ${room.racers.find(r => r.id === racerId)?.name} ${betType} @ ${odds}×`);
   });
 
   socket.on('place_side_bet', ({ roomCode, sideBetId, amount }) => {
     const room = rooms[roomCode];
     if (!room || room.state !== 'racing') return;
-    if (room.betsLocked) { socket.emit('bet_error', { message: 'Bets are locked.' }); return; }
+    if (room.lockedRacers.size > 0) { socket.emit('bet_error', { message: 'Side bets are locked.' }); return; }
 
     const player  = room.players.find((p) => p.id === socket.id);
     if (!player) return;
@@ -606,6 +634,30 @@ io.on('connection', (socket) => {
     socket.emit('bet_confirmed', { bets: player.bets, tokens: player.tokens, sideBets: player.sideBets });
     io.to(roomCode).emit('side_bets_update', { sideBetSummary });
     console.log(`[Room ${roomCode}] ${player.name}: ${amount}-chip side bet — ${sideBet.description}`);
+  });
+
+  socket.on('sponsor_horse', ({ roomCode, racerId, amount }) => {
+    const room = rooms[roomCode];
+    if (!room || room.state !== 'awaiting_race') return;
+
+    const player = room.players.find((p) => p.id === socket.id);
+    if (!player) return;
+
+    if (room.sponsorships[socket.id]) { socket.emit('sponsor_error', { message: 'You have already sponsored a horse this race.' }); return; }
+
+    const validAmount = Math.max(1, Math.floor(Number(amount) || 1));
+    if (player.tokens < validAmount) { socket.emit('sponsor_error', { message: `Not enough tokens (you have ${player.tokens}).` }); return; }
+
+    const racer = room.racers.find((r) => r.id === racerId);
+    if (!racer) return;
+
+    player.tokens -= validAmount;
+    room.sponsorships[socket.id] = { playerName: player.name, racerId, racerName: racer.name, amount: validAmount };
+
+    const sponsorships = buildSponsorList(room);
+    socket.emit('sponsor_confirmed', { tokens: player.tokens, sponsorship: room.sponsorships[socket.id] });
+    io.to(roomCode).emit('sponsorships_update', { sponsorships });
+    console.log(`[Room ${roomCode}] ${player.name} sponsors ${racer.name} for ${validAmount} tokens`);
   });
 
   socket.on('start_race', ({ roomCode }) => {

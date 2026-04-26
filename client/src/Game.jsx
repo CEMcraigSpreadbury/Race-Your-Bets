@@ -207,6 +207,41 @@ function DraftPanel({ turnData, myOptions, players, racers, mySocketId, onSelect
   );
 }
 
+// ─── Drawn card — flips in on each new card ───────────────────────────────────
+function DrawnCard({ draw, racers, compact }) {
+  if (!draw) return null;
+  const racer = racerById(draw.card.racerId, racers);
+  const c     = racer.color;
+  const w     = compact ? 58  : 84;
+  const h     = compact ? 84  : 122;
+  const icon  = compact ? '1.8rem' : '2.8rem';
+  const name  = compact ? '0.52rem' : '0.65rem';
+
+  return (
+    <div style={{
+      width: w, height: h, borderRadius: compact ? 7 : 10, flexShrink: 0,
+      border: `2px solid ${c}`,
+      background: `${c}1a`,
+      color: c,
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'space-between',
+      padding: compact ? '4px 3px' : '7px 5px',
+      boxShadow: `0 0 18px ${c}55, 0 4px 12px rgba(0,0,0,0.5)`,
+      animation: 'cardFlipIn 0.38s ease',
+      userSelect: 'none',
+    }}>
+      <span style={{ fontSize: name, fontWeight: 'bold', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: '100%', textAlign: 'center' }}>
+        {racer.name.split(' ')[0]}
+      </span>
+      <span style={{ fontSize: icon, lineHeight: 1 }}>{actionIcon(draw.card)}</span>
+      <span style={{ fontSize: name, color: `${c}bb`, lineHeight: 1, textAlign: 'center' }}>{actionLabel(draw.card)}</span>
+      <span style={{ fontSize: name, fontWeight: 'bold', transform: 'rotate(180deg)', lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: '100%', textAlign: 'center' }}>
+        {racer.name.split(' ')[0]}
+      </span>
+    </div>
+  );
+}
+
 // ─── Race track ───────────────────────────────────────────────────────────────
 function RaceTrack({ racers, raceState, pulsingRacer, trackLength }) {
   if (!raceState) return null;
@@ -283,34 +318,6 @@ function RaceLog({ log, racers }) {
   );
 }
 
-// ─── Toast notifications ──────────────────────────────────────────────────────
-function ToastLayer({ toasts, racers }) {
-  return (
-    <>
-      {toasts.map((t) => {
-        const racer = racerById(t.card.racerId, racers);
-        return (
-          <div
-            key={t.id}
-            style={{
-              position: 'fixed', left: `${t.x}%`, top: `${t.y}%`,
-              zIndex: 999, pointerEvents: 'none',
-              animation: `toastLife ${t.duration}ms ease forwards`,
-              background: '#0a0a0a', border: `2px solid ${racer.color}`,
-              borderRadius: 8, padding: '6px 14px',
-              display: 'flex', alignItems: 'center', gap: 8,
-              boxShadow: `0 0 18px ${racer.color}55`, whiteSpace: 'nowrap',
-            }}
-          >
-            <span style={{ fontSize: '1.1rem' }}>{actionIcon(t.card)}</span>
-            <span style={{ color: racer.color, fontWeight: 'bold', fontSize: '0.85rem' }}>{racer.name}</span>
-            <span style={{ color: '#aaa', fontSize: '0.78rem' }}>{t.shortDesc}</span>
-          </div>
-        );
-      })}
-    </>
-  );
-}
 
 // ─── Shuffle + countdown overlay ─────────────────────────────────────────────
 function RaceCountdown({ prep }) {
@@ -420,13 +427,13 @@ function ChipTray({ held, usedChips, tokens, onSelect, onClear }) {
 
 // ─── Single bet cell ──────────────────────────────────────────────────────────
 // Width is controlled by the flex group in BettingGrid — don't set a fixed width here.
-function BetCell({ racer, betType, odds, loss, occupant, isMe, held, usedChips, betsLocked, onPlace }) {
+function BetCell({ racer, betType, odds, loss, occupant, isMe, held, usedChips, isLocked, onPlace }) {
   const typeDef  = BET_TYPES[betType];
   const chipUsed = held != null && usedChips.has(held);
-  const canPlace = !betsLocked && !occupant && held != null && !chipUsed;
+  const canPlace = !isLocked && !occupant && held != null && !chipUsed;
 
   function handleClick() {
-    if (betsLocked || isMe) return;
+    if (isLocked || isMe) return;
     if (canPlace) onPlace(held);
   }
 
@@ -498,8 +505,10 @@ const NAME_COL = 70; // px — horse name column
 const GRP_GAP  = 6;  // px — gap between SHOW / PLACE / WIN groups
 const CELL_GAP = 3;  // px — gap between cells within a group
 
-function BettingGrid({ racers, myBets, betSummary, betsLocked, held, usedChips, onPlace }) {
-  const slots = betSummary?.slots ?? {};
+function BettingGrid({ racers, myBets, betSummary, lockedRacers, held, usedChips, onPlace }) {
+  const slots     = betSummary?.slots ?? {};
+  const anyLocked = lockedRacers.size > 0;
+  const allLocked = lockedRacers.size >= racers.length;
 
   return (
     <div style={{ background: '#071a07', border: '2px solid #1a4a1a', borderRadius: 12, padding: '0.5rem 0.6rem' }}>
@@ -509,11 +518,13 @@ function BettingGrid({ racers, myBets, betSummary, betsLocked, held, usedChips, 
         <span style={{ color: '#4a8a4a', fontWeight: 'bold', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: 2 }}>
           Betting Mat
         </span>
-        {betsLocked
-          ? <span style={{ fontSize: '0.75rem', color: '#f44336', fontWeight: 'bold' }}>🔒 Locked</span>
-          : held != null
-            ? <span style={{ fontSize: '0.75rem', color: '#f5c518' }}>Tap cell — <strong>{held}</strong>-chip</span>
-            : <span style={{ fontSize: '0.75rem', color: '#4a8a4a' }}>Pick a chip below</span>
+        {allLocked
+          ? <span style={{ fontSize: '0.75rem', color: '#f44336', fontWeight: 'bold' }}>🔒 All bets closed</span>
+          : anyLocked
+            ? <span style={{ fontSize: '0.75rem', color: '#f5c518', fontWeight: 'bold' }}>⚠️ Some horses locked</span>
+            : held != null
+              ? <span style={{ fontSize: '0.75rem', color: '#f5c518' }}>Tap cell — <strong>{held}</strong>-chip</span>
+              : <span style={{ fontSize: '0.75rem', color: '#4a8a4a' }}>Pick a chip below</span>
         }
       </div>
 
@@ -537,13 +548,15 @@ function BettingGrid({ racers, myBets, betSummary, betsLocked, held, usedChips, 
       </div>
 
       {/* Racer rows */}
-      {racers.map((racer) => (
-        <div key={racer.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+      {racers.map((racer) => {
+        const isLocked = lockedRacers.has(racer.id);
+        return (
+        <div key={racer.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 4, opacity: isLocked ? 0.55 : 1, transition: 'opacity 0.3s' }}>
 
           {/* Horse name */}
           <div style={{ width: NAME_COL, flexShrink: 0, paddingRight: 5, overflow: 'hidden' }}>
             <div style={{ color: racer.color, fontWeight: 'bold', fontSize: '0.8rem', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              🐎 {racer.name.split(' ')[0]}
+              {isLocked ? '🔒' : '🐎'} {racer.name.split(' ')[0]}
             </div>
             {racer.name.split(' ').length > 1 && (
               <div style={{ color: racer.color + '77', fontSize: '0.6rem', lineHeight: 1 }}>
@@ -577,7 +590,7 @@ function BettingGrid({ racers, myBets, betSummary, betsLocked, held, usedChips, 
                       isMe={isMine}
                       held={held}
                       usedChips={usedChips}
-                      betsLocked={betsLocked}
+                      isLocked={isLocked}
                       onPlace={(amount) => onPlace(racer.id, betType, slotIndex, amount)}
                     />
                   );
@@ -586,7 +599,8 @@ function BettingGrid({ racers, myBets, betSummary, betsLocked, held, usedChips, 
             );
           })}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -706,24 +720,160 @@ function ResultGrid({ racers, myBets, betResults }) {
   );
 }
 
-// ─── Bets off popup ───────────────────────────────────────────────────────────
-function BetsOffPopup({ show }) {
-  if (!show) return null;
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 950, display: 'flex',
-      alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
-    }}>
-      <div style={{
-        background: 'rgba(20,0,0,0.96)', border: '3px solid #f44336', borderRadius: 18,
-        padding: '1.4rem 3rem', textAlign: 'center',
-        boxShadow: '0 0 40px #f4433688',
-        animation: 'betsOffPop 0.25s ease',
-      }}>
-        <div style={{ fontSize: '2rem', lineHeight: 1 }}>🔒</div>
-        <div style={{ color: '#f44336', fontWeight: 'bold', fontSize: '2rem', letterSpacing: 3, textTransform: 'uppercase', marginTop: 4 }}>
-          Bets are off!
+// ─── Sponsor panel ────────────────────────────────────────────────────────────
+function SponsorPanel({ racers, tokens, mySponsorship, allSponsorships, onSponsor }) {
+  const [selected, setSelected] = useState(null);
+  const [amount, setAmount]     = useState(1);
+  const K = racers.length;
+
+  const sponsorReturn = (inv, rank) => Math.floor(inv * 2 * (K - rank) / K);
+
+  // Read-only view once sponsored
+  if (mySponsorship) {
+    const racer = racers.find((r) => r.id === mySponsorship.racerId);
+    return (
+      <div style={{ background: '#070f1a', border: `2px solid ${racer?.color ?? '#333'}`, borderRadius: 12, padding: '0.75rem 0.9rem', marginTop: '0.75rem' }}>
+        <div style={{ fontSize: '0.65rem', color: '#3a6a9a', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 6 }}>Your Sponsorship</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: '1.4rem' }}>🐎</span>
+          <span style={{ color: racer?.color, fontWeight: 'bold', fontSize: '0.95rem' }}>{mySponsorship.racerName}</span>
+          <span style={{ color: '#f5c518', fontWeight: 'bold' }}>{mySponsorship.amount} 💰</span>
+          <span style={{ color: '#555', fontSize: '0.78rem', marginLeft: 'auto' }}>Waiting for race…</span>
         </div>
+        <SponsorBoard racers={racers} allSponsorships={allSponsorships} mySponsorship={mySponsorship} compact />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: '#070f1a', border: '2px solid #1a3a5a', borderRadius: 12, padding: '0.75rem 0.9rem', marginTop: '0.75rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ fontSize: '0.65rem', color: '#3a6a9a', textTransform: 'uppercase', letterSpacing: 2 }}>
+          Sponsor a Horse
+        </span>
+        <span style={{ fontSize: '0.75rem', color: '#f5c518' }}>💰 {tokens}</span>
+      </div>
+
+      <p style={{ fontSize: '0.8rem', color: '#666', margin: '0 0 10px' }}>
+        Invest tokens on a horse. Better finish = bigger return. Last place = lose your stake.
+      </p>
+
+      {/* Horse picker */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+        {racers.map((r) => (
+          <button
+            key={r.id}
+            onClick={() => setSelected(r.id)}
+            style={{
+              padding: '5px 12px', borderRadius: 7, fontSize: '0.8rem', cursor: 'pointer',
+              background: selected === r.id ? r.color : '#0f1f2f',
+              color:      selected === r.id ? '#111'   : r.color,
+              border:     `2px solid ${r.color}`,
+              fontWeight: selected === r.id ? 'bold' : 'normal',
+              transition: 'all 0.1s',
+            }}
+          >
+            🐎 {r.name}
+          </button>
+        ))}
+      </div>
+
+      {selected != null && (
+        <>
+          {/* Amount input */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <span style={{ color: '#888', fontSize: '0.82rem' }}>Stake:</span>
+            <input
+              type="number" min={1} max={tokens}
+              value={amount}
+              onChange={(e) => setAmount(Math.min(tokens, Math.max(1, Math.floor(Number(e.target.value)) || 1)))}
+              style={{ width: 70, textAlign: 'center', padding: '4px 8px', fontSize: '0.9rem' }}
+            />
+            <button
+              onClick={() => setAmount(tokens)}
+              style={{ padding: '3px 10px', fontSize: '0.72rem', background: '#1a3a1a', color: '#4caf50', border: '1px solid #2a5a2a' }}
+            >
+              All in
+            </button>
+          </div>
+
+          {/* Return preview */}
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 12 }}>
+            {racers.map((_, i) => {
+              const rank = i + 1;
+              const ret  = sponsorReturn(amount, rank);
+              const net  = ret - amount;
+              const pos  = net >= 0;
+              return (
+                <div key={rank} style={{
+                  padding: '3px 8px', borderRadius: 6, fontSize: '0.68rem',
+                  background: pos ? '#0a200a' : '#200a0a',
+                  border: `1px solid ${pos ? '#2a5a2a' : '#5a2a2a'}`,
+                  color: pos ? '#4caf50' : '#f44336',
+                }}>
+                  {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `${rank}th`}&nbsp;
+                  {net >= 0 ? `+${net}` : net}
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            disabled={tokens < 1 || amount < 1}
+            onClick={() => onSponsor(selected, amount)}
+            style={{ width: '100%', fontSize: '0.9rem', padding: '0.55rem' }}
+          >
+            Sponsor {racers.find((r) => r.id === selected)?.name} for {amount} 💰
+          </button>
+        </>
+      )}
+
+      <SponsorBoard racers={racers} allSponsorships={allSponsorships} mySponsorship={null} compact />
+    </div>
+  );
+}
+
+// ─── Public sponsor board (compact) ──────────────────────────────────────────
+function SponsorBoard({ racers, allSponsorships, mySponsorship, compact }) {
+  if (!allSponsorships?.length) return null;
+
+  // Group by horse
+  const byHorse = {};
+  for (const sp of allSponsorships) {
+    if (!byHorse[sp.racerId]) byHorse[sp.racerId] = [];
+    byHorse[sp.racerId].push(sp);
+  }
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: '0.62rem', color: '#3a5a3a', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 5 }}>
+        Sponsorships
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {Object.entries(byHorse).map(([rid, sps]) => {
+          const racer = racers.find((r) => r.id === Number(rid));
+          if (!racer) return null;
+          return (
+            <div key={rid} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ color: racer.color, fontSize: '0.75rem', fontWeight: 'bold', minWidth: 80 }}>
+                🐎 {racer.name.split(' ')[0]}
+              </span>
+              {sps.map((sp) => {
+                const isMe = mySponsorship?.racerId === sp.racerId && sp.playerName === (mySponsorship?.playerName ?? '');
+                return (
+                  <span key={sp.playerId} style={{
+                    fontSize: '0.68rem', padding: '2px 7px', borderRadius: 10,
+                    background: isMe ? racer.color + '33' : '#1a1a1a',
+                    border: `1px solid ${isMe ? racer.color + '88' : '#333'}`,
+                    color: isMe ? racer.color : '#888',
+                  }}>
+                    {sp.playerName} · {sp.amount}💰
+                  </span>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -925,6 +1075,32 @@ function Podium({ payouts, racers, winner, raceId, totalRaces, isLastRace, onNew
   );
 }
 
+// ─── Sponsor result row ───────────────────────────────────────────────────────
+function SponsorResult({ sponsorResult, racers }) {
+  if (!sponsorResult) return null;
+  const racer = racers.find((r) => r.id === sponsorResult.racerId);
+  const won   = sponsorResult.net > 0;
+  const glow  = won ? '#4caf50' : '#f44336';
+  return (
+    <div style={{ width: '100%', maxWidth: 600 }}>
+      <div style={{ color: '#555', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 6 }}>Sponsorship</div>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        border: `2px solid ${glow}`, background: glow + '18',
+        borderRadius: 9, padding: '0.45rem 0.75rem',
+        boxShadow: `0 0 10px ${glow}44`,
+      }}>
+        <span style={{ fontSize: '1.2rem' }}>🐎</span>
+        <span style={{ color: racer?.color ?? '#ccc', fontWeight: 'bold', flex: 1 }}>{sponsorResult.racerName}</span>
+        <span style={{ fontSize: '0.78rem', color: '#888' }}>Staked {sponsorResult.amount}💰 → {sponsorResult.returned}💰</span>
+        <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: glow }}>
+          {sponsorResult.net >= 0 ? `+${sponsorResult.net}` : sponsorResult.net}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Player result overlay ────────────────────────────────────────────────────
 function PlayerResult({ myPayout, racers, sideBets, raceId, totalRaces, onDismiss }) {
   if (!myPayout) return null;
@@ -969,6 +1145,8 @@ function PlayerResult({ myPayout, racers, sideBets, raceId, totalRaces, onDismis
           sideBetResults={myPayout.sideBetResults}
         />
       )}
+
+      <SponsorResult sponsorResult={myPayout.sponsorResult} racers={racers} />
 
       <button onClick={onDismiss} style={{ marginTop: '0.75rem', background: '#222', color: '#aaa', border: '1px solid #444' }}>
         See Standings
@@ -1024,6 +1202,7 @@ export default function Game({
   roomCode, racers, mySocketId, baseDeck,
   players: initialPlayers, initialTurnData, initialDraftOptions,
   startingTokens, isHost, raceId, totalRaces, trackLength, sideBets,
+  initialSponsorships,
 }) {
   const [turnData, setTurnData]               = useState(initialTurnData ?? null);
   const [myOptions, setMyOptions]             = useState(initialDraftOptions ?? null);
@@ -1034,28 +1213,23 @@ export default function Game({
   const [winner, setWinner]                   = useState(null);
   const [pulsingRacer, setPulsingRacer]       = useState(null);
   const [racePrep, setRacePrep]               = useState(null);
-  const [toasts, setToasts]                   = useState([]);
   const [tokens, setTokens]                   = useState(startingTokens ?? 10);
   const [myBets, setMyBets]                   = useState({});
   const [mySideBets, setMySideBets]           = useState({});
   const [sideBetOccupants, setSideBetOccupants] = useState({});
-  const [betsLocked, setBetsLocked]           = useState(false);
-  const [showBetsOff, setShowBetsOff]         = useState(false);
+  const [lockedRacers, setLockedRacers]       = useState(new Set());
+  const [lastDraw, setLastDraw]               = useState(null);
+  const [cardFlipKey, setCardFlipKey]         = useState(0);
   const [betSummary, setBetSummary]           = useState(null);
   const [payouts, setPayouts]                 = useState(null);
   const [heldChip, setHeldChip]               = useState(null);
   const [showResult, setShowResult]           = useState(false);
+  const [mySponsorship, setMySponsorship]     = useState(null);
+  const [allSponsorships, setAllSponsorships] = useState(initialSponsorships ?? []);
 
   const isLastRace    = raceId >= totalRaces;
   const [deckExpanded, setDeckExpanded] = useState(false);
 
-  useEffect(() => {
-    if (betsLocked) {
-      setShowBetsOff(true);
-      const t = setTimeout(() => setShowBetsOff(false), 2500);
-      return () => clearTimeout(t);
-    }
-  }, [betsLocked]);
 
   useEffect(() => {
     const onTurnUpdate    = (data) => { setTurnData(data); setMyOptions(null); };
@@ -1068,6 +1242,9 @@ export default function Game({
 
     const onRaceStarting = ({ deckSize }) => {
       setGamePhase('racing');
+      const initial = {};
+      racers.forEach((r) => { initial[r.id] = { position: 0, status: 'active' }; });
+      setRaceState(initial);
       setRacePrep({ phase: 'shuffling', deckSize });
       setTimeout(() => setRacePrep({ phase: 'countdown', number: 3 }), 1100);
       setTimeout(() => setRacePrep({ phase: 'countdown', number: 2 }), 2100);
@@ -1076,31 +1253,24 @@ export default function Game({
       setTimeout(() => setRacePrep(null),                                4500);
     };
 
-    const onRaceUpdate = ({ racerStates, card, description, movedRacerId, betsLocked: locked, betSummary: summary }) => {
+    const onRaceUpdate = ({ racerStates, card, description, movedRacerId, lockedRacers: lr, betSummary: summary }) => {
       setRaceState(racerStates);
       setRaceLog((prev) => [...prev, { card, description }].slice(-60));
+      setLastDraw({ card, description });
+      setCardFlipKey((k) => k + 1);
       setGamePhase('racing');
-      if (locked)  setBetsLocked(true);
+      if (lr)      setLockedRacers(new Set(lr));
       if (summary) setBetSummary(summary);
 
       if (movedRacerId != null) {
         setPulsingRacer(movedRacerId);
         setTimeout(() => setPulsingRacer(null), 350);
       }
-
-      const duration = 2400;
-      const toast = {
-        id: `${Date.now()}-${Math.random()}`, card,
-        shortDesc: description.replace(/^[^—–-]+[—–-]\s*/, '').replace(/^[^:]+:\s*/, '') || actionLabel(card),
-        x: 8 + Math.random() * 58, y: 8 + Math.random() * 58, duration,
-      };
-      setToasts((prev) => [...prev, toast]);
-      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toast.id)), duration);
     };
 
-    const onOddsUpdate      = ({ betSummary: summary, betsLocked: locked }) => {
+    const onOddsUpdate      = ({ betSummary: summary, lockedRacers: lr }) => {
       if (summary) setBetSummary(summary);
-      if (locked)  setBetsLocked(true);
+      if (lr)      setLockedRacers(new Set(lr));
     };
     const onBetConfirmed    = ({ bets, tokens: t, sideBets: sb }) => {
       setMyBets(bets ?? {});
@@ -1111,6 +1281,13 @@ export default function Game({
       if (sideBetSummary?.occupants) setSideBetOccupants(sideBetSummary.occupants);
     };
 
+    const onSponsorConfirmed   = ({ tokens: t, sponsorship }) => {
+      setTokens(t);
+      setMySponsorship(sponsorship);
+    };
+    const onSponsorshipsUpdate = ({ sponsorships }) => setAllSponsorships(sponsorships ?? []);
+    const onSponsorError       = ({ message }) => alert(message);
+
     const onRaceFinished = ({ winner: w, racerStates, payouts: p, betSummary: summary }) => {
       setRaceState(racerStates);
       setWinner(w);
@@ -1119,26 +1296,32 @@ export default function Game({
       if (summary) setBetSummary(summary);
     };
 
-    socket.on('turn_update',      onTurnUpdate);
-    socket.on('draft_options',    onDraftOptions);
-    socket.on('draft_complete',   onDraftComplete);
-    socket.on('race_starting',    onRaceStarting);
-    socket.on('race_update',      onRaceUpdate);
-    socket.on('odds_update',      onOddsUpdate);
-    socket.on('bet_confirmed',    onBetConfirmed);
-    socket.on('side_bets_update', onSideBetsUpdate);
-    socket.on('race_finished',    onRaceFinished);
+    socket.on('turn_update',        onTurnUpdate);
+    socket.on('draft_options',      onDraftOptions);
+    socket.on('draft_complete',     onDraftComplete);
+    socket.on('race_starting',      onRaceStarting);
+    socket.on('race_update',        onRaceUpdate);
+    socket.on('odds_update',        onOddsUpdate);
+    socket.on('bet_confirmed',      onBetConfirmed);
+    socket.on('side_bets_update',   onSideBetsUpdate);
+    socket.on('sponsor_confirmed',  onSponsorConfirmed);
+    socket.on('sponsorships_update', onSponsorshipsUpdate);
+    socket.on('sponsor_error',      onSponsorError);
+    socket.on('race_finished',      onRaceFinished);
 
     return () => {
-      socket.off('turn_update',      onTurnUpdate);
-      socket.off('draft_options',    onDraftOptions);
-      socket.off('draft_complete',   onDraftComplete);
-      socket.off('race_starting',    onRaceStarting);
-      socket.off('race_update',      onRaceUpdate);
-      socket.off('odds_update',      onOddsUpdate);
-      socket.off('bet_confirmed',    onBetConfirmed);
-      socket.off('side_bets_update', onSideBetsUpdate);
-      socket.off('race_finished',    onRaceFinished);
+      socket.off('turn_update',        onTurnUpdate);
+      socket.off('draft_options',      onDraftOptions);
+      socket.off('draft_complete',     onDraftComplete);
+      socket.off('race_starting',      onRaceStarting);
+      socket.off('race_update',        onRaceUpdate);
+      socket.off('odds_update',        onOddsUpdate);
+      socket.off('bet_confirmed',      onBetConfirmed);
+      socket.off('side_bets_update',   onSideBetsUpdate);
+      socket.off('sponsor_confirmed',  onSponsorConfirmed);
+      socket.off('sponsorships_update', onSponsorshipsUpdate);
+      socket.off('sponsor_error',      onSponsorError);
+      socket.off('race_finished',      onRaceFinished);
     };
   }, [isHost]);
 
@@ -1157,11 +1340,18 @@ export default function Game({
     setHeldChip(null);
   }
 
+  function handleSponsorHorse(racerId, amount) {
+    socket.emit('sponsor_horse', { roomCode, racerId, amount });
+  }
+
   // Chips are free each race — track which denominations have already been placed (main + side bets)
   const usedChips = new Set([
     ...Object.values(myBets).map((b) => b.amount),
     ...Object.values(mySideBets).map((b) => b.amount),
   ]);
+
+  const anyLocked = lockedRacers.size > 0;
+  const allLocked = lockedRacers.size >= racers.length;
 
   const myPayout = payouts?.find((p) => p.playerId === mySocketId) ?? null;
 
@@ -1170,7 +1360,6 @@ export default function Game({
     return (
       <>
         <RaceCountdown prep={racePrep} />
-        <ToastLayer toasts={toasts} racers={racers} />
 
         <div style={{ minHeight: '100vh', background: '#0a0a0a', padding: '1.5rem' }}>
           <div style={{ maxWidth: 800, margin: '0 auto' }}>
@@ -1190,8 +1379,9 @@ export default function Game({
                 <h2 style={{ color: '#f5c518', margin: '0 0 0.5rem' }}>Draft in Progress</h2>
                 {draftDone ? (
                   <>
-                    <p style={{ color: '#4caf50', marginBottom: '1.5rem' }}>All players have chosen their card!</p>
-                    <button onClick={() => socket.emit('start_race', { roomCode })} style={{ fontSize: '1.1rem', padding: '0.75rem 2rem' }}>
+                    <p style={{ color: '#4caf50', marginBottom: '1rem' }}>All players have chosen their card!</p>
+                    <SponsorBoard racers={racers} allSponsorships={allSponsorships} mySponsorship={null} />
+                    <button onClick={() => socket.emit('start_race', { roomCode })} style={{ fontSize: '1.1rem', padding: '0.75rem 2rem', marginTop: '1rem' }}>
                       Start Race
                     </button>
                   </>
@@ -1228,7 +1418,17 @@ export default function Game({
                     <strong style={{ color: racerById(winner.id, racers).color, fontSize: '1.1rem' }}>{winner.name} wins!</strong>
                   </div>
                 )}
-                <RaceTrack racers={racers} raceState={raceState} pulsingRacer={pulsingRacer} trackLength={trackLength ?? 10} />
+                <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start' }}>
+                  {gamePhase === 'racing' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, paddingTop: 22, flexShrink: 0 }}>
+                      <span style={{ fontSize: '0.58rem', color: '#444', textTransform: 'uppercase', letterSpacing: 1 }}>Drawing</span>
+                      <DrawnCard key={cardFlipKey} draw={lastDraw} racers={racers} />
+                    </div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <RaceTrack racers={racers} raceState={raceState} pulsingRacer={pulsingRacer} trackLength={trackLength ?? 10} />
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1286,8 +1486,6 @@ export default function Game({
   // ── Player / phone view ─────────────────────────────────────────────────────
   return (
     <>
-      <BetsOffPopup show={showBetsOff} />
-
       {showResult && myPayout && (
         <PlayerResult
           myPayout={myPayout}
@@ -1299,7 +1497,7 @@ export default function Game({
         />
       )}
 
-      {gamePhase === 'racing' && !betsLocked && !showResult && (
+      {gamePhase === 'racing' && !allLocked && !showResult && (
         <ChipTray
           held={heldChip}
           usedChips={usedChips}
@@ -1332,10 +1530,32 @@ export default function Game({
             draftDone={draftDone}
           />
           {draftDone && (
-            <p style={{ color: '#888', textAlign: 'center', marginTop: '1rem', fontSize: '0.9rem' }}>
-              Waiting for the host to start the race…
-            </p>
+            <>
+              <SponsorPanel
+                racers={racers}
+                tokens={tokens}
+                mySponsorship={mySponsorship}
+                allSponsorships={allSponsorships}
+                onSponsor={handleSponsorHorse}
+              />
+              <p style={{ color: '#666', textAlign: 'center', marginTop: '0.75rem', fontSize: '0.82rem' }}>
+                Waiting for the host to start the race…
+              </p>
+            </>
           )}
+        </div>
+      )}
+
+      {/* Drawn card strip — player phone view */}
+      {gamePhase === 'racing' && !showResult && lastDraw && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.4rem 0.75rem' }}>
+          <DrawnCard key={cardFlipKey} draw={lastDraw} racers={racers} compact />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: '0.62rem', color: '#444', textTransform: 'uppercase', letterSpacing: 1 }}>Last drawn</div>
+            <div style={{ fontSize: '0.82rem', color: racerById(lastDraw.card.racerId, racers).color, fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {lastDraw.description}
+            </div>
+          </div>
         </div>
       )}
 
@@ -1346,7 +1566,7 @@ export default function Game({
             racers={racers}
             myBets={myBets}
             betSummary={betSummary}
-            betsLocked={betsLocked}
+            lockedRacers={lockedRacers}
             held={heldChip}
             usedChips={usedChips}
             onPlace={handlePlaceChip}
@@ -1357,7 +1577,7 @@ export default function Game({
             mySideBets={mySideBets}
             held={heldChip}
             usedChips={usedChips}
-            betsLocked={betsLocked}
+            betsLocked={anyLocked}
             mySocketId={mySocketId}
             onPlace={handlePlaceSideBet}
           />

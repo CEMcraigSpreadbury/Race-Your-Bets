@@ -77,8 +77,9 @@ function HostWaitingRoom({ roomData, onStartGame }) {
   const { roomCode, players, settings: initSettings } = roomData;
   const canStart = players.length >= 1;
 
-  const [totalRaces, setTotalRaces]   = useState(initSettings?.totalRaces ?? 3);
-  const [trackLength, setTrackLength] = useState(initSettings?.trackLength ?? 10);
+  const [totalRaces, setTotalRaces]     = useState(initSettings?.totalRaces ?? 3);
+  const [trackLength, setTrackLength]   = useState(initSettings?.trackLength ?? 10);
+  const [cardInterval, setCardInterval] = useState(initSettings?.cardInterval ?? 1500);
   const [numHorses, setNumHorses]     = useState(initSettings?.horses?.length ?? 5);
   const [horseNames, setHorseNames]   = useState(() =>
     Array.from({ length: initSettings?.horses?.length ?? 5 }, (_, i) =>
@@ -97,7 +98,7 @@ function HostWaitingRoom({ roomData, onStartGame }) {
   }
 
   function handleStartGame() {
-    onStartGame({ totalRaces, numHorses, horseNames, trackLength });
+    onStartGame({ totalRaces, numHorses, horseNames, trackLength, cardInterval });
   }
 
   return (
@@ -160,6 +161,28 @@ function HostWaitingRoom({ roomData, onStartGame }) {
             ))}
           </div>
           <span style={hw.settingsHint}>{trackLength} steps</span>
+        </div>
+
+        <div style={hw.settingsRow}>
+          <span style={hw.settingsLabel}>Speed</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[{ label: 'Slow', value: 3000 }, { label: 'Normal', value: 1500 }, { label: 'Fast', value: 800 }].map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setCardInterval(opt.value)}
+                style={{
+                  padding: '5px 14px', borderRadius: 6, fontSize: '0.82rem', cursor: 'pointer',
+                  background: cardInterval === opt.value ? '#f5c518' : '#1a1a1a',
+                  color:      cardInterval === opt.value ? '#111'    : '#888',
+                  border:     `1px solid ${cardInterval === opt.value ? '#f5c518' : '#333'}`,
+                  fontWeight: cardInterval === opt.value ? 'bold' : 'normal',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <span style={hw.settingsHint}>{cardInterval / 1000}s per card</span>
         </div>
 
         <div style={{ marginTop: '1rem' }}>

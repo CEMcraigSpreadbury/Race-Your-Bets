@@ -78,6 +78,7 @@ function App() {
         totalRaces:     data?.totalRaces     ?? 3,
         trackLength:    data?.trackLength    ?? 10,
         sideBets:       data?.sideBets       ?? [],
+        sponsorships:   data?.sponsorships   ?? [],
       });
       setGamePhase('game');
     };
@@ -116,6 +117,7 @@ function App() {
           totalRaces={gameStartData.totalRaces ?? 3}
           trackLength={gameStartData.trackLength ?? 10}
           sideBets={gameStartData.sideBets ?? []}
+          initialSponsorships={gameStartData.sponsorships ?? []}
         />
       </>
     );
