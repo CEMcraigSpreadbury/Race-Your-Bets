@@ -73,16 +73,18 @@ function Stepper({ value, min, max, onChange }) {
 }
 
 // ─── Host waiting room — big TV-friendly display ───────────────────────────────
-function HostWaitingRoom({ roomData, onStartGame }) {
+function HostWaitingRoom({ roomData, onStartGame, onHostReady }) {
   const { roomCode, players, settings: initSettings } = roomData;
   const canStart = players.length >= 1;
 
+  useEffect(() => { onHostReady?.(); }, []);
+
   const [totalRaces, setTotalRaces]     = useState(initSettings?.totalRaces ?? 3);
-  const [trackLength, setTrackLength]   = useState(initSettings?.trackLength ?? 10);
+  const [trackLength, setTrackLength]   = useState(initSettings?.trackLength ?? 20);
   const [cardInterval, setCardInterval] = useState(initSettings?.cardInterval ?? 1500);
-  const [numHorses, setNumHorses]     = useState(initSettings?.horses?.length ?? 5);
+  const [numHorses, setNumHorses]     = useState(initSettings?.horses?.length ?? 9);
   const [horseNames, setHorseNames]   = useState(() =>
-    Array.from({ length: initSettings?.horses?.length ?? 5 }, (_, i) =>
+    Array.from({ length: initSettings?.horses?.length ?? 9 }, (_, i) =>
       initSettings?.horses?.[i]?.name ?? DEFAULT_HORSE_NAMES[i] ?? `Horse ${i + 1}`
     )
   );
@@ -137,8 +139,8 @@ function HostWaitingRoom({ roomData, onStartGame }) {
 
         <div style={hw.settingsRow}>
           <span style={hw.settingsLabel}>Horses</span>
-          <Stepper value={numHorses} min={3} max={8} onChange={handleNumHorsesChange} />
-          <span style={hw.settingsHint}>3 – 8</span>
+          <Stepper value={numHorses} min={3} max={9} onChange={handleNumHorsesChange} />
+          <span style={hw.settingsHint}>3 – 9</span>
         </div>
 
         <div style={hw.settingsRow}>
@@ -251,7 +253,7 @@ function PlayerWaitingRoom({ roomData, mySocketId }) {
 }
 
 // ─── Lobby root — owns socket logic for pre-game screens ─────────────────────
-export default function Lobby({ mySocketId }) {
+export default function Lobby({ mySocketId, onHostReady }) {
   const [roomData, setRoomData]   = useState(null);
   const [joinError, setJoinError] = useState('');
   const [connected, setConnected] = useState(socket.connected);
@@ -320,6 +322,7 @@ export default function Lobby({ mySocketId }) {
         onStartGame={(settings) =>
           socket.emit('start_game', { roomCode: roomData.roomCode, settings })
         }
+        onHostReady={onHostReady}
       />
     );
   }

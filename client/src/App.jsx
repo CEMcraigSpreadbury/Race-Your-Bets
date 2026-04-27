@@ -32,22 +32,11 @@ function App() {
   const audioRef                          = useRef(null);
 
   useEffect(() => {
-    const audio   = new Audio('/bet-slip-boogie.mp3');
-    audio.loop    = true;
-    audio.volume  = 0.4;
+    const audio  = new Audio('/sounds/Bet Slip Boogie.mp3');
+    audio.loop   = true;
+    audio.volume = 0.4;
     audioRef.current = audio;
-
-    // Start on first user interaction (browser autoplay policy)
-    const startOnInteraction = () => {
-      audio.play().then(() => setMusicPlaying(true)).catch(() => {});
-      window.removeEventListener('pointerdown', startOnInteraction);
-    };
-    window.addEventListener('pointerdown', startOnInteraction);
-
-    return () => {
-      window.removeEventListener('pointerdown', startOnInteraction);
-      audio.pause();
-    };
+    return () => audio.pause();
   }, []);
 
   function toggleMusic() {
@@ -101,7 +90,7 @@ function App() {
   if (gamePhase === 'game' && gameStartData) {
     return (
       <>
-        <MusicToggle playing={musicPlaying} onToggle={toggleMusic} />
+        {gameStartData.isHost && <MusicToggle playing={musicPlaying} onToggle={toggleMusic} />}
         <Game
           key={`${gameStartData.roomCode}-${gameStartData.raceId}`}
           roomCode={gameStartData.roomCode}
@@ -123,10 +112,12 @@ function App() {
     );
   }
 
+  const startMusic = () => audioRef.current?.play().then(() => setMusicPlaying(true)).catch(() => {});
+
   return (
     <>
-      <MusicToggle playing={musicPlaying} onToggle={toggleMusic} />
-      <Lobby mySocketId={mySocketId} />
+      {musicPlaying && <MusicToggle playing={musicPlaying} onToggle={toggleMusic} />}
+      <Lobby mySocketId={mySocketId} onHostReady={startMusic} />
     </>
   );
 }

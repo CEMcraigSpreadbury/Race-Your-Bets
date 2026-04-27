@@ -18,14 +18,15 @@ const io = new Server(httpServer, {
 
 // ─── Racer pool ───────────────────────────────────────────────────────────────
 const RACER_POOL = [
-  { id: 0, name: 'Prancing Pony', color: '#ff6b6b' },
-  { id: 1, name: 'Thunder Bolt',  color: '#f5c518' },
-  { id: 2, name: 'Iron Duke',     color: '#4a9eff' },
-  { id: 3, name: 'Silver Arrow',  color: '#4caf50' },
-  { id: 4, name: 'Dusty Rose',    color: '#c084fc' },
-  { id: 5, name: 'Night Rider',   color: '#ff9800' },
-  { id: 6, name: 'Golden Gate',   color: '#00bcd4' },
-  { id: 7, name: 'Storm Chaser',  color: '#e91e63' },
+  { id: 0, name: 'Craig Neck Speed',     color: '#ff6b6b' },
+  { id: 1, name: "Where There's A Will", color: '#f5c518' },
+  { id: 2, name: "Tom, Dick n Hurry",    color: '#4a9eff' },
+  { id: 3, name: 'Bend It Like Ben',     color: '#4caf50' },
+  { id: 4, name: 'Joely Good Run',       color: '#c084fc' },
+  { id: 5, name: 'Dan-ger Zone',         color: '#ff9800' },
+  { id: 6, name: 'Josh Wash',            color: '#00bcd4' },
+  { id: 7, name: 'Haydn Seek',           color: '#e91e63' },
+  { id: 8, name: 'Hen-Ree Longlegs',     color: '#84cc16' },
 ];
 
 // ─── In-memory room store ─────────────────────────────────────────────────────
@@ -155,8 +156,8 @@ function generateRoomCode() {
 function defaultSettings() {
   return {
     totalRaces:  3,
-    trackLength: 10,
-    horses: RACER_POOL.slice(0, 5).map((r) => ({ id: r.id, name: r.name, color: r.color })),
+    trackLength: 20,
+    horses: RACER_POOL.slice(0, 9).map((r) => ({ id: r.id, name: r.name, color: r.color })),
   };
 }
 
@@ -171,6 +172,29 @@ function buildSponsorList(room) {
   return Object.entries(room.sponsorships ?? {}).map(([playerId, s]) => ({
     playerId, playerName: s.playerName, racerId: s.racerId, racerName: s.racerName, amount: s.amount,
   }));
+}
+
+// ─── Dynamic odds ─────────────────────────────────────────────────────────────
+function computeRacerStakes(room) {
+  const stakes = {};
+  for (const r of room.racers) stakes[r.id] = 0;
+  for (const p of room.players) {
+    for (const [key, bet] of Object.entries(p.bets ?? {})) {
+      const rId = parseInt(key.slice(0, key.indexOf('_')));
+      stakes[rId] = (stakes[rId] ?? 0) + bet.amount;
+    }
+  }
+  return stakes;
+}
+
+// Popular horse → shorter odds; ignored horse → longer odds.
+// factor = 1 at average stake, ~0.5 at 3× average, ~1.3 at 0.
+function adjustOdds(baseOdds, racerStake, totalStake, numRacers) {
+  if (totalStake === 0) return baseOdds;
+  const avgStake = totalStake / numRacers;
+  const ratio    = racerStake / avgStake;          // 1 = average
+  const factor   = Math.max(0.5, Math.min(1.5, 1 + (1 - ratio) * 0.3));
+  return Math.max(2, Math.round(baseOdds * factor));
 }
 
 // ─── Bet summaries ────────────────────────────────────────────────────────────
@@ -191,6 +215,8 @@ function buildBetSummary(room) {
       slots[r.id][type] = def.slots.map(() => null);
     }
   }
+  const racerStakes = computeRacerStakes(room);
+  const totalStake  = Object.values(racerStakes).reduce((s, v) => s + v, 0);
   for (const p of room.players) {
     for (const [key, bet] of Object.entries(p.bets ?? {})) {
       const under   = key.indexOf('_');
@@ -203,7 +229,17 @@ function buildBetSummary(room) {
       }
     }
   }
-  return { slots };
+  // Adjusted odds for every empty slot (what the next bettor would get)
+  const adjustedOdds = {};
+  for (const r of racers) {
+    adjustedOdds[r.id] = {};
+    for (const [type, def] of Object.entries(BET_TYPES)) {
+      adjustedOdds[r.id][type] = def.slots.map((slot) =>
+        adjustOdds(slot.odds, racerStakes[r.id] ?? 0, totalStake, racers.length)
+      );
+    }
+  }
+  return { slots, adjustedOdds };
 }
 
 // ─── Room broadcast ───────────────────────────────────────────────────────────
@@ -505,7 +541,7 @@ io.on('connection', (socket) => {
 
     const validLengths   = [10, 15, 20];
     const validIntervals = [800, 1500, 3000];
-    const numHorses      = Math.max(3, Math.min(8, settings?.numHorses ?? 5));
+    const numHorses      = Math.max(3, Math.min(9, settings?.numHorses ?? 9));
     room.settings = {
       totalRaces:    Math.max(1, Math.min(10, settings?.totalRaces ?? 3)),
       trackLength:   validLengths.includes(settings?.trackLength) ? settings.trackLength : 10,
@@ -598,13 +634,17 @@ io.on('connection', (socket) => {
                      Object.values(player.sideBets ?? {}).some((b) => b.amount === amount);
     if (chipUsed) { socket.emit('bet_error', { message: `Your ${amount}-chip is already placed.` }); return; }
 
-    const { odds, loss } = betTypeDef.slots[slotIndex];
+    const { loss }    = betTypeDef.slots[slotIndex];
+    const baseOdds    = betTypeDef.slots[slotIndex].odds;
+    const stakes      = computeRacerStakes(room);
+    const totalStake  = Object.values(stakes).reduce((s, v) => s + v, 0);
+    const odds        = adjustOdds(baseOdds, stakes[racerId] ?? 0, totalStake, room.racers.length);
     player.bets[betKey] = { slotIndex, amount, odds, loss };
 
     const betSummary = buildBetSummary(room);
     socket.emit('bet_confirmed', { bets: player.bets, tokens: player.tokens, sideBets: player.sideBets ?? {} });
     io.to(roomCode).emit('odds_update', { betSummary, lockedRacers: [...room.lockedRacers] });
-    console.log(`[Room ${roomCode}] ${player.name}: ${amount}-chip on ${room.racers.find(r => r.id === racerId)?.name} ${betType} @ ${odds}×`);
+    console.log(`[Room ${roomCode}] ${player.name}: ${amount}-chip on ${room.racers.find(r => r.id === racerId)?.name} ${betType} @ ${odds}× (base ${baseOdds}×)`);
   });
 
   socket.on('place_side_bet', ({ roomCode, sideBetId, amount }) => {
