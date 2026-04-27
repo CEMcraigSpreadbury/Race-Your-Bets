@@ -11,7 +11,7 @@ const httpServer = http.createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: 'http://localhost:5173',
+    origin: '*',
     methods: ['GET', 'POST'],
   },
 });
@@ -728,7 +728,11 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = 3001;
+const path = require('path');
+app.use(express.static(path.join(__dirname, '../client/dist')));
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, '../client/dist/index.html')));
+
+const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, () => {
-  console.log(`Race Your Bets server listening on http://localhost:${PORT}`);
+  console.log(`Race Your Bets server listening on port ${PORT}`);
 });

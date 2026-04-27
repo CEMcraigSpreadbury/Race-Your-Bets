@@ -1,0 +1,12 @@
+{
+  "name": "race-your-bets",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd client && npm install && npm run build",
+    "start": "node server/server.js",
+    "install:server": "cd server && npm install"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
