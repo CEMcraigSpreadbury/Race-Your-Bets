@@ -330,7 +330,7 @@ function RaceTrack({ racers, raceState, pulsingRacer, trackLength, lockedRacers 
                 top: '50%',
                 transform: `translateY(-50%) scale(${isPulsing ? 1.35 : 1}) scaleX(-1)`,
                 transition: isPulsing ? 'left 0.45s ease, transform 0.05s ease' : 'left 0.45s ease, transform 0.35s ease',
-                fontSize: '1.6rem', lineHeight: 1, zIndex: 4, pointerEvents: 'none',
+                fontSize: '2rem', lineHeight: 1, zIndex: 4, pointerEvents: 'none',
                 filter: isStumbled ? 'grayscale(1)' : 'none',
               }}>🐎</span>
 
