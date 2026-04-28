@@ -510,13 +510,13 @@ function BetCell({ racer, betType, displayOdds, baseOdds, loss, occupant, isMe, 
         held == null ? 'Pick a chip first' : chipUsed ? 'Chip already placed' : ''
       }
       style={{
-        flex: 1, minWidth: 0, height: 66, borderRadius: 8,
+        flex: 1, minWidth: 0, height: 54, borderRadius: 7,
         border: `2px solid ${borderColor}`, background: bgColor,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         cursor: canPlace ? 'pointer' : 'default',
         transition: 'border-color 0.12s, background 0.12s', position: 'relative',
         boxShadow: canPlace ? `0 0 10px ${typeDef.color}55` : 'none',
-        gap: 2,
+        gap: 1,
       }}
     >
       {/* Odds: shows multiplier when empty, actual collect when chip placed */}
@@ -563,10 +563,10 @@ function BettingGrid({ racers, myBets, betSummary, lockedRacers, closingRacers, 
   const allLocked = lockedRacers.size >= racers.length;
 
   return (
-    <div style={{ background: '#071a07', border: '2px solid #1a4a1a', borderRadius: 12, padding: '0.5rem 0.6rem' }}>
+    <div style={{ background: '#071a07', border: '2px solid #1a4a1a', borderRadius: 10, padding: '0.3rem 0.35rem' }}>
 
       {/* Status bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
         <span style={{ color: '#4a8a4a', fontWeight: 'bold', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: 2 }}>
           Betting Mat
         </span>
@@ -581,7 +581,7 @@ function BettingGrid({ racers, myBets, betSummary, lockedRacers, closingRacers, 
       </div>
 
       {/* Column group headers — same flex structure as rows */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', marginBottom: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', marginBottom: 2 }}>
         <div style={{ width: NAME_COL, flexShrink: 0 }} />
         {BET_TYPE_ORDER.map((type, gi) => {
           const def = BET_TYPES[type];
@@ -605,7 +605,7 @@ function BettingGrid({ racers, myBets, betSummary, lockedRacers, closingRacers, 
         const isClosing = !isLocked && (closingRacers?.has(racer.id) ?? false);
         return (
         <div key={racer.id} style={{
-          display: 'flex', alignItems: 'center', marginBottom: 4,
+          display: 'flex', alignItems: 'center', marginBottom: 2,
           opacity: isLocked ? 0.55 : 1, transition: 'opacity 0.3s',
           borderRadius: 6,
           outline: isClosing ? '1px solid #f5c51866' : 'none',
@@ -1179,22 +1179,6 @@ function BettingCarousel({ bettingGrid, sideBetPanel, chipTrayVisible }) {
 
   return (
     <div style={{ height: `calc(100vh - ${chipH}px)`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Tab bar — only when there are side bets */}
-      {hasSideBets && (
-        <div style={{ display: 'flex', borderBottom: '1px solid #1a3a1a', background: '#060c06', flexShrink: 0 }}>
-          {slides.map((sl, i) => (
-            <button key={i} onClick={() => goTo(i)} style={{
-              flex: 1, padding: '10px 0', background: 'none', border: 'none',
-              borderBottom: `2px solid ${i === page ? '#4a9eff' : 'transparent'}`,
-              color: i === page ? '#4a9eff' : '#555',
-              fontSize: '0.78rem', fontWeight: i === page ? 'bold' : 'normal',
-              cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase',
-            }}>
-              {sl.label}
-            </button>
-          ))}
-        </div>
-      )}
       {/* Slide viewport */}
       <div
         style={{ flex: 1, overflow: 'hidden', position: 'relative', touchAction: 'pan-y' }}
@@ -1216,7 +1200,7 @@ function BettingCarousel({ bettingGrid, sideBetPanel, chipTrayVisible }) {
               flexShrink: 0,
               overflowY: 'auto',
               overflowX: 'hidden',
-              padding: '0.5rem 0.4rem 80px',
+              padding: '3px 3px 80px',
               boxSizing: 'border-box',
             }}>
               {sl.content}
@@ -1224,6 +1208,18 @@ function BettingCarousel({ bettingGrid, sideBetPanel, chipTrayVisible }) {
           ))}
         </div>
       </div>
+      {/* Dot indicators — only when there are side bets */}
+      {hasSideBets && (
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 5, padding: '4px 0', flexShrink: 0 }}>
+          {slides.map((_, i) => (
+            <div key={i} onClick={() => goTo(i)} style={{
+              width: i === page ? 14 : 6, height: 5, borderRadius: 3,
+              background: i === page ? '#4a9eff' : '#2a2a2a',
+              transition: 'all 0.25s', cursor: 'pointer',
+            }} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
