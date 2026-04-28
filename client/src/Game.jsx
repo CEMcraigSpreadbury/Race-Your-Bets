@@ -213,10 +213,10 @@ function DrawnCard({ draw, racers, compact, large }) {
   if (!draw) return null;
   const racer = racerById(draw.card.racerId, racers);
   const c     = racer.color;
-  const w     = compact ? 58  : large ? 180 : 84;
-  const h     = compact ? 84  : large ? 260 : 122;
-  const icon  = compact ? '1.8rem' : large ? '6rem' : '2.8rem';
-  const name  = compact ? '0.52rem' : large ? '1.1rem' : '0.65rem';
+  const w     = compact ? 58  : large ? 130 : 84;
+  const h     = compact ? 84  : large ? 188 : 122;
+  const icon  = compact ? '1.8rem' : large ? '4.2rem' : '2.8rem';
+  const name  = compact ? '0.52rem' : large ? '0.9rem' : '0.65rem';
 
   return (
     <div style={{
@@ -1761,7 +1761,7 @@ export default function Game({
                     : [racerById(winner.id, racers)];
                   const medals = ['🥇', '🥈', '🥉'];
                   return (
-                    <div style={{ ...s.banner, borderColor: racerById(winner.id, racers).color, flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div style={{ ...s.banner, borderColor: racerById(winner.id, racers).color, flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center' }}>
                       {top3.map((r, i) => (
                         <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={{ fontSize: '1.3rem' }}>{medals[i]}</span>
@@ -1772,7 +1772,7 @@ export default function Game({
                   );
                 })()}
                 {gamePhase === 'racing' && (
-                  <div style={{ display: 'flex', justifyContent: 'center', height: 260 }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', height: 190 }}>
                     {lastDraw && <DrawnCard key={cardFlipKey} draw={lastDraw} racers={racers} large />}
                   </div>
                 )}
