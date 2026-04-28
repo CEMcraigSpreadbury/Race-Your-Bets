@@ -1132,6 +1132,102 @@ function SideBetPanel({ sideBets, sideBetOccupants, mySideBets, held, usedChips,
   );
 }
 
+// ─── Betting carousel — swipe left/right between Betting Mat and Side Bets ────
+function BettingCarousel({ bettingGrid, sideBetPanel, chipTrayVisible }) {
+  const hasSideBets = !!sideBetPanel;
+  const pageCount   = hasSideBets ? 2 : 1;
+  const [page, setPage]           = useState(0);
+  const [dragDelta, setDragDelta] = useState(0);
+  const startX = useRef(null);
+  const startY = useRef(null);
+  const dirRef = useRef(null);
+
+  const goTo = (i) => setPage(Math.max(0, Math.min(pageCount - 1, i)));
+
+  const onDown = (e) => {
+    const t = e.touches?.[0] ?? e;
+    startX.current = t.clientX;
+    startY.current = t.clientY;
+    dirRef.current = null;
+    setDragDelta(0);
+  };
+  const onMove = (e) => {
+    if (startX.current === null) return;
+    const t  = e.touches?.[0] ?? e;
+    const dx = t.clientX - startX.current;
+    const dy = t.clientY - startY.current;
+    if (!dirRef.current) {
+      if (Math.abs(dx) > Math.abs(dy) + 5)      dirRef.current = 'h';
+      else if (Math.abs(dy) > Math.abs(dx) + 5) dirRef.current = 'v';
+      else return;
+    }
+    if (dirRef.current === 'h') setDragDelta(dx);
+  };
+  const onUp = () => {
+    if (dirRef.current === 'h' && Math.abs(dragDelta) > 50) goTo(page + (dragDelta < 0 ? 1 : -1));
+    startX.current = null;
+    dirRef.current = null;
+    setDragDelta(0);
+  };
+
+  const slides = [
+    { label: 'Betting Mat', content: bettingGrid },
+    ...(hasSideBets ? [{ label: 'Side Bets', content: sideBetPanel }] : []),
+  ];
+
+  const chipH = chipTrayVisible ? 90 : 0;
+
+  return (
+    <div style={{ height: `calc(100vh - ${chipH}px)`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Tab bar — only when there are side bets */}
+      {hasSideBets && (
+        <div style={{ display: 'flex', borderBottom: '1px solid #1a3a1a', background: '#060c06', flexShrink: 0 }}>
+          {slides.map((sl, i) => (
+            <button key={i} onClick={() => goTo(i)} style={{
+              flex: 1, padding: '10px 0', background: 'none', border: 'none',
+              borderBottom: `2px solid ${i === page ? '#4a9eff' : 'transparent'}`,
+              color: i === page ? '#4a9eff' : '#555',
+              fontSize: '0.78rem', fontWeight: i === page ? 'bold' : 'normal',
+              cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase',
+            }}>
+              {sl.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Slide viewport */}
+      <div
+        style={{ flex: 1, overflow: 'hidden', position: 'relative', touchAction: 'pan-y' }}
+        onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}
+        onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
+      >
+        <div style={{
+          display: 'flex',
+          width: `${pageCount * 100}%`,
+          height: '100%',
+          transform: `translateX(calc(-${page * (100 / pageCount)}% + ${dragDelta}px))`,
+          transition: dragDelta !== 0 ? 'none' : 'transform 0.28s ease',
+          userSelect: 'none',
+        }}>
+          {slides.map((sl, i) => (
+            <div key={i} style={{
+              width: `${100 / pageCount}%`,
+              height: '100%',
+              flexShrink: 0,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              padding: '0.5rem 0.4rem 80px',
+              boxSizing: 'border-box',
+            }}>
+              {sl.content}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Side bet results (shown in PlayerResult) ─────────────────────────────────
 function SideBetResults({ sideBets, mySideBets, sideBetResults }) {
   const entries = Object.entries(mySideBets ?? {});
@@ -1723,15 +1819,17 @@ export default function Game({
         />
       )}
 
-      {/* Compact header — always visible */}
-      <div style={{ padding: '0.6rem 0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ color: '#f5c518', fontWeight: 'bold', fontSize: '1rem' }}>Race Your Bets</span>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span style={{ color: '#555', fontSize: '0.78rem' }}>{raceId}/{totalRaces}</span>
-          <span style={{ color: '#f5c518', fontSize: '0.85rem' }}>💰 {tokens}</span>
-          <span style={s.roomBadge}>{roomCode}</span>
+      {/* Compact header — hidden during race to maximise betting mat space */}
+      {gamePhase !== 'racing' && (
+        <div style={{ padding: '0.6rem 0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ color: '#f5c518', fontWeight: 'bold', fontSize: '1rem' }}>Race Your Bets</span>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ color: '#555', fontSize: '0.78rem' }}>{raceId}/{totalRaces}</span>
+            <span style={{ color: '#f5c518', fontSize: '0.85rem' }}>💰 {tokens}</span>
+            <span style={s.roomBadge}>{roomCode}</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Draft phase */}
       {gamePhase === 'drafting' && (
@@ -1763,30 +1861,35 @@ export default function Game({
       )}
 
 
-      {/* Betting grid + side bets — full viewport width, no maxWidth cap */}
+      {/* Betting carousel — swipeable during race */}
       {gamePhase === 'racing' && !showResult && (
-        <div style={{ padding: '0.5rem 0.4rem 90px' }}>
-          <BettingGrid
-            racers={racers}
-            myBets={myBets}
-            betSummary={betSummary}
-            lockedRacers={lockedRacers}
-            closingRacers={closingRacers}
-            held={heldChip}
-            usedChips={usedChips}
-            onPlace={handlePlaceChip}
-          />
-          <SideBetPanel
-            sideBets={sideBets}
-            sideBetOccupants={sideBetOccupants}
-            mySideBets={mySideBets}
-            held={heldChip}
-            usedChips={usedChips}
-            betsLocked={anyLocked}
-            mySocketId={mySocketId}
-            onPlace={handlePlaceSideBet}
-          />
-        </div>
+        <BettingCarousel
+          chipTrayVisible={!allLocked}
+          bettingGrid={
+            <BettingGrid
+              racers={racers}
+              myBets={myBets}
+              betSummary={betSummary}
+              lockedRacers={lockedRacers}
+              closingRacers={closingRacers}
+              held={heldChip}
+              usedChips={usedChips}
+              onPlace={handlePlaceChip}
+            />
+          }
+          sideBetPanel={sideBets?.length > 0 ? (
+            <SideBetPanel
+              sideBets={sideBets}
+              sideBetOccupants={sideBetOccupants}
+              mySideBets={mySideBets}
+              held={heldChip}
+              usedChips={usedChips}
+              betsLocked={anyLocked}
+              mySocketId={mySocketId}
+              onPlace={handlePlaceSideBet}
+            />
+          ) : null}
+        />
       )}
 
       {/* Post-race standings */}
