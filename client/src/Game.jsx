@@ -6,25 +6,38 @@ import { playRaceStart, playRaceFinish, startRandomSounds, stopRandomSounds } fr
 // ─── Card helpers ─────────────────────────────────────────────────────────────
 function actionIcon(card) {
   if (card.type === 'move') return card.value === 1 ? '▶' : '▶▶';
-  if (card.type === 'double')  return '×2';
-  if (card.type === 'boost')   return '↑';
-  if (card.type === 'stumble') return '✕';
+  if (card.type === 'double')          return '×2';
+  if (card.type === 'boost')           return '↑';
+  if (card.type === 'stumble')         return '✕';
+  if (card.type === 'global_forward_1') return '▶';
+  if (card.type === 'global_forward_2') return '▶▶';
+  if (card.type === 'global_back_1')    return '◀';
+  if (card.type === 'photo_finish')     return '📷';
+  if (card.type === 'slipstream')       return '💨';
+  if (card.type === 'tailwind')         return '🌬️';
   return '?';
 }
 
 function actionLabel(card) {
-  if (card.type === 'move')    return `Move +${card.value}`;
-  if (card.type === 'double')  return 'Double';
-  if (card.type === 'boost')   return 'Boost';
-  if (card.type === 'stumble') return 'Stumble';
+  if (card.type === 'move')             return `Move +${card.value}`;
+  if (card.type === 'double')           return 'Double';
+  if (card.type === 'boost')            return 'Boost';
+  if (card.type === 'stumble')          return 'Stumble';
+  if (card.type === 'global_forward_1') return 'All +1';
+  if (card.type === 'global_forward_2') return 'All +2';
+  if (card.type === 'global_back_1')    return 'All -1';
+  if (card.type === 'photo_finish')     return 'Photo Finish';
+  if (card.type === 'slipstream')       return 'Slipstream';
+  if (card.type === 'tailwind')         return 'Tailwind';
   return card.type;
 }
 
 // ─── Mini card — deck grid ────────────────────────────────────────────────────
 function MiniCard({ card, racers }) {
-  const racer = racerById(card.racerId, racers);
-  const c = racer.color;
-  const shortName = racer.name.split(' ')[0];
+  const isGlobal = card.racerId == null;
+  const racer = isGlobal ? null : racerById(card.racerId, racers);
+  const c = isGlobal ? '#f5c518' : racer.color;
+  const shortName = isGlobal ? 'ALL' : racer.name.split(' ')[0];
   return (
     <div style={{
       width: 58, height: 80, borderRadius: 7,
@@ -211,8 +224,10 @@ function DraftPanel({ turnData, myOptions, players, racers, mySocketId, onSelect
 // ─── Drawn card — flips in on each new card ───────────────────────────────────
 function DrawnCard({ draw, racers, compact, large }) {
   if (!draw) return null;
-  const racer = racerById(draw.card.racerId, racers);
-  const c     = racer.color;
+  const isGlobal = draw.card.racerId == null;
+  const racer    = isGlobal ? null : racerById(draw.card.racerId, racers);
+  const c        = isGlobal ? '#f5c518' : racer.color;
+  const topLabel = isGlobal ? 'ALL HORSES' : (large ? racer.name : racer.name.split(' ')[0]);
   const w     = compact ? 58  : large ? 130 : 84;
   const h     = compact ? 84  : large ? 188 : 122;
   const icon  = compact ? '1.8rem' : large ? '4.2rem' : '2.8rem';
@@ -232,12 +247,12 @@ function DrawnCard({ draw, racers, compact, large }) {
       userSelect: 'none',
     }}>
       <span style={{ fontSize: name, fontWeight: 'bold', lineHeight: 1.2, textAlign: 'center' }}>
-        {large ? racer.name : racer.name.split(' ')[0]}
+        {topLabel}
       </span>
       <span style={{ fontSize: icon, lineHeight: 1 }}>{actionIcon(draw.card)}</span>
       <span style={{ fontSize: name, color: `${c}bb`, lineHeight: 1, textAlign: 'center', marginTop: large ? -10 : 0 }}>{actionLabel(draw.card)}</span>
       <span style={{ fontSize: name, fontWeight: 'bold', transform: 'rotate(180deg)', lineHeight: 1.2, textAlign: 'center' }}>
-        {large ? racer.name : racer.name.split(' ')[0]}
+        {topLabel}
       </span>
     </div>
   );
@@ -313,9 +328,9 @@ function RaceTrack({ racers, raceState, pulsingRacer, trackLength, lockedRacers 
                 position: 'absolute',
                 left: `max(10px, calc(${pct}% - 13px))`,
                 top: '50%',
-                transform: `translateY(-50%) scale(${isPulsing ? 1.35 : 1})`,
+                transform: `translateY(-50%) scale(${isPulsing ? 1.35 : 1}) scaleX(-1)`,
                 transition: isPulsing ? 'left 0.45s ease, transform 0.05s ease' : 'left 0.45s ease, transform 0.35s ease',
-                fontSize: '1.2rem', lineHeight: 1, zIndex: 4, pointerEvents: 'none',
+                fontSize: '1.6rem', lineHeight: 1, zIndex: 4, pointerEvents: 'none',
                 filter: isStumbled ? 'grayscale(1)' : 'none',
               }}>🐎</span>
 

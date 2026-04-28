@@ -134,6 +134,11 @@ function generateBaseDeck(racers) {
   for (const type of specialTypes) {
     deck.push({ type, racerId: randomFrom(racers).id });
   }
+  // Global cards — affect all horses or positionally-selected horses
+  const globalTypes = ['global_forward_1', 'global_forward_2', 'global_back_1', 'photo_finish', 'slipstream', 'tailwind'];
+  for (const type of globalTypes) {
+    deck.push({ type, racerId: null });
+  }
   return shuffle(deck);
 }
 
@@ -339,7 +344,71 @@ function flipNextCard(roomCode) {
     io.to(roomCode).emit('deck_reshuffled');
   }
 
-  const card  = room.deck[room.deckIndex++];
+  const card     = room.deck[room.deckIndex++];
+  const trackLen = room.trackLength ?? 10;
+
+  // ── Global cards (no specific racer) ─────────────────────────────────────
+  if (card.racerId == null) {
+    const sorted = () => [...room.racers].sort((a, b) =>
+      (room.racerStates[b.id]?.position ?? 0) - (room.racerStates[a.id]?.position ?? 0)
+    );
+    let description = '';
+
+    if (card.type === 'global_forward_1') {
+      for (const r of room.racers) room.racerStates[r.id].position = Math.min(room.racerStates[r.id].position + 1, trackLen);
+      description = 'All horses surge forward 1!';
+    } else if (card.type === 'global_forward_2') {
+      for (const r of room.racers) room.racerStates[r.id].position = Math.min(room.racerStates[r.id].position + 2, trackLen);
+      description = 'All horses charge forward 2!';
+    } else if (card.type === 'global_back_1') {
+      for (const r of room.racers) room.racerStates[r.id].position = Math.max(room.racerStates[r.id].position - 1, 0);
+      description = 'All horses fall back 1!';
+    } else if (card.type === 'photo_finish') {
+      const top3 = sorted().slice(0, 3);
+      for (const r of top3) room.racerStates[r.id].position = Math.min(room.racerStates[r.id].position + 1, trackLen);
+      description = `Photo Finish! Top 3 horses lunge forward 1`;
+    } else if (card.type === 'slipstream') {
+      const ranked = sorted();
+      if (ranked.length >= 2) {
+        const r = ranked[1];
+        room.racerStates[r.id].position = Math.min(room.racerStates[r.id].position + 2, trackLen);
+        description = `Slipstream! ${r.name} (2nd) drafts ahead +2`;
+      }
+    } else if (card.type === 'tailwind') {
+      const ranked = sorted();
+      const last = ranked[ranked.length - 1];
+      if (last) {
+        room.racerStates[last.id].position = Math.min(room.racerStates[last.id].position + 2, trackLen);
+        description = `Tailwind! ${last.name} (last) catches a gust +2`;
+      }
+    }
+
+    const racerStates = {};
+    for (const [id, state] of Object.entries(room.racerStates)) {
+      racerStates[id] = { position: state.position, status: state.skipNext ? 'stumbled' : 'active' };
+    }
+    const lockPos = trackLen * BET_LOCK_PCT;
+    for (const [id, state] of Object.entries(room.racerStates)) {
+      const numId = Number(id);
+      if (state.position >= lockPos && !room.lockedRacers.has(numId)) {
+        room.lockedRacers.add(numId);
+      }
+    }
+    const betSummary = buildBetSummary(room);
+    io.to(roomCode).emit('race_update', {
+      card, description, racerStates,
+      cardsRemaining: room.deck.length - room.deckIndex,
+      movedRacerId: null,
+      lockedRacers: [...room.lockedRacers],
+      betSummary,
+    });
+    // Check if any racer crossed the finish line
+    const finisher = sorted().find((r) => room.racerStates[r.id].position >= trackLen);
+    if (finisher) endRace(roomCode, finisher);
+    return;
+  }
+
+  // ── Horse-specific cards ──────────────────────────────────────────────────
   const racer = room.racers.find((r) => r.id === card.racerId);
   const rs    = room.racerStates[card.racerId];
 
@@ -356,7 +425,7 @@ function flipNextCard(roomCode) {
     let steps = card.value;
     if (rs.doubleNext) { steps *= 2; rs.doubleNext = false; }
     if (rs.boostNext)  { steps += 1; rs.boostNext  = false; }
-    rs.position = Math.min(rs.position + steps, room.trackLength ?? 10);
+    rs.position = Math.min(rs.position + steps, trackLen);
     const extra = steps - card.value;
     description = extra > 0
       ? `${racer.name} moves +${steps} (${extra > card.value ? 'doubled' : `+${extra} boost`})`
@@ -377,7 +446,7 @@ function flipNextCard(roomCode) {
     racerStates[id] = { position: state.position, status: state.skipNext ? 'stumbled' : 'active' };
   }
 
-  const lockPos = (room.trackLength ?? 10) * BET_LOCK_PCT;
+  const lockPos = trackLen * BET_LOCK_PCT;
   for (const [id, state] of Object.entries(room.racerStates)) {
     const numId = Number(id);
     if (state.position >= lockPos && !room.lockedRacers.has(numId)) {
@@ -396,7 +465,7 @@ function flipNextCard(roomCode) {
     betSummary,
   });
 
-  if (rs.position >= (room.trackLength ?? 10)) endRace(roomCode, racer);
+  if (rs.position >= trackLen) endRace(roomCode, racer);
 }
 
 function endRace(roomCode, winner = null) {

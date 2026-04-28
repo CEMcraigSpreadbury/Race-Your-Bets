@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import socket from './socket';
 import Lobby from './Lobby';
 import Game from './Game';
+import { initSounds } from './sounds';
 
 function MusicToggle({ playing, onToggle }) {
   return (
@@ -112,7 +113,10 @@ function App() {
     );
   }
 
-  const startMusic = () => audioRef.current?.play().then(() => setMusicPlaying(true)).catch(() => {});
+  const startMusic = () => {
+    initSounds();
+    audioRef.current?.play().then(() => setMusicPlaying(true)).catch(() => {});
+  };
 
   return (
     <>
