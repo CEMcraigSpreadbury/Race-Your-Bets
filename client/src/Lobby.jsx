@@ -8,7 +8,7 @@ const DEFAULT_HORSE_NAMES = [
   'Dusty Rose', 'Night Rider', 'Golden Gate', 'Storm Chaser',
 ];
 
-// ─── Landing screen ───────────────────────────────────────────────────────────
+//  ─── Landing screen ───────────────────────────────────────────────────────────
 function LandingScreen({ onCreate, onJoin, error, connected }) {
   const [view, setView]         = useState('home'); // 'home' | 'join'
   const [name, setName]         = useState('');
