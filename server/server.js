@@ -730,7 +730,7 @@ io.on('connection', (socket) => {
 
 const path = require('path');
 app.use(express.static(path.join(__dirname, '../client/dist')));
-app.get('/{*splat}', (req, res) => res.sendFile(path.join(__dirname, '../client/dist/index.html')));
+app.use((req, res) => res.sendFile(path.join(__dirname, '../client/dist/index.html')));
 
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, () => {
