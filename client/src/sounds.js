@@ -18,9 +18,32 @@ const RANDOM_SOUNDS = [
   'Will',
 ].map((name) => `/sounds/random/${name}.aac`);
 
+let ctx = null;
+const buffers = {};
+
+export function initSounds() {
+  if (ctx) return;
+  try {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx.resume();
+  } catch (e) { return; }
+
+  const all = ['/sounds/race start.aac', '/sounds/race finish.aac', ...RANDOM_SOUNDS];
+  for (const src of all) {
+    fetch(src)
+      .then((r) => r.arrayBuffer())
+      .then((ab) => ctx.decodeAudioData(ab))
+      .then((buf) => { buffers[src] = buf; })
+      .catch(() => {});
+  }
+}
+
 function play(src) {
-  const a = new Audio(src);
-  a.play().catch(() => {});
+  if (!ctx || !buffers[src]) return;
+  const source = ctx.createBufferSource();
+  source.buffer = buffers[src];
+  source.connect(ctx.destination);
+  source.start(0);
 }
 
 export function playRaceStart()  { play('/sounds/race start.aac'); }
@@ -31,7 +54,6 @@ let remaining = [];
 
 function nextFromBag() {
   if (remaining.length === 0) {
-    // Reshuffle all sounds into a new random order
     remaining = [...RANDOM_SOUNDS].sort(() => Math.random() - 0.5);
   }
   return remaining.pop();
