@@ -505,7 +505,7 @@ function BetCell({ racer, betType, displayOdds, baseOdds, loss, occupant, isMe, 
         held == null ? 'Pick a chip first' : chipUsed ? 'Chip already placed' : ''
       }
       style={{
-        flex: 1, minWidth: 0, height: 54, borderRadius: 7,
+        flex: 1, minWidth: 0, minHeight: 34, borderRadius: 7,
         border: `2px solid ${borderColor}`, background: bgColor,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         cursor: canPlace ? 'pointer' : 'default',
@@ -558,10 +558,10 @@ function BettingGrid({ racers, myBets, betSummary, lockedRacers, closingRacers, 
   const allLocked = lockedRacers.size >= racers.length;
 
   return (
-    <div style={{ background: '#071a07', border: '2px solid #1a4a1a', borderRadius: 10, padding: '0.3rem 0.35rem' }}>
+    <div style={{ background: '#071a07', border: '2px solid #1a4a1a', borderRadius: 10, padding: '0.3rem 0.35rem', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
       {/* Status bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem', flexShrink: 0 }}>
         <span style={{ color: '#4a8a4a', fontWeight: 'bold', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: 2 }}>
           Betting Mat
         </span>
@@ -576,7 +576,7 @@ function BettingGrid({ racers, myBets, betSummary, lockedRacers, closingRacers, 
       </div>
 
       {/* Column group headers — same flex structure as rows */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', marginBottom: 2 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', marginBottom: 2, flexShrink: 0 }}>
         <div style={{ width: NAME_COL, flexShrink: 0 }} />
         {BET_TYPE_ORDER.map((type, gi) => {
           const def = BET_TYPES[type];
@@ -595,12 +595,14 @@ function BettingGrid({ racers, myBets, betSummary, lockedRacers, closingRacers, 
       </div>
 
       {/* Racer rows */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minHeight: 0 }}>
       {racers.map((racer) => {
         const isLocked  = lockedRacers.has(racer.id);
         const isClosing = !isLocked && (closingRacers?.has(racer.id) ?? false);
         return (
         <div key={racer.id} style={{
-          display: 'flex', alignItems: 'center', marginBottom: 2,
+          flex: 1, minHeight: 34,
+          display: 'flex', alignItems: 'stretch',
           opacity: isLocked ? 0.55 : 1, transition: 'opacity 0.3s',
           borderRadius: 6,
           outline: isClosing ? '1px solid #f5c51866' : 'none',
@@ -608,7 +610,7 @@ function BettingGrid({ racers, myBets, betSummary, lockedRacers, closingRacers, 
         }}>
 
           {/* Horse name */}
-          <div style={{ width: NAME_COL, flexShrink: 0, paddingRight: 5, overflow: 'hidden' }}>
+          <div style={{ width: NAME_COL, flexShrink: 0, paddingRight: 5, overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <div style={{ color: racer.color, fontWeight: 'bold', fontSize: '0.8rem', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {isLocked ? '🔒' : isClosing ? '⚡' : '🐎'} {racer.name.split(' ')[0]}
             </div>
@@ -626,7 +628,7 @@ function BettingGrid({ racers, myBets, betSummary, lockedRacers, closingRacers, 
             return (
               <div
                 key={betType}
-                style={{ flex: def.slots.length, display: 'flex', gap: CELL_GAP, marginRight: gi < BET_TYPE_ORDER.length - 1 ? GRP_GAP : 0 }}
+                style={{ flex: def.slots.length, display: 'flex', gap: CELL_GAP, marginRight: gi < BET_TYPE_ORDER.length - 1 ? GRP_GAP : 0, alignItems: 'stretch' }}
               >
                 {def.slots.map((slot, slotIndex) => {
                   const occupant    = racerSlots[slotIndex];
@@ -660,6 +662,7 @@ function BettingGrid({ racers, myBets, betSummary, lockedRacers, closingRacers, 
         </div>
         );
       })}
+      </div>
     </div>
   );
 }
@@ -1197,6 +1200,8 @@ function BettingCarousel({ bettingGrid, sideBetPanel, chipTrayVisible }) {
               overflowX: 'hidden',
               padding: '3px 3px 80px',
               boxSizing: 'border-box',
+              display: 'flex',
+              flexDirection: 'column',
             }}>
               {sl.content}
             </div>
