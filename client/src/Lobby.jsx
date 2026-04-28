@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import socket from './socket';
+import logo from './assets/logo.png';
 
 const RACER_COLORS       = ['#ff6b6b', '#f5c518', '#4a9eff', '#4caf50', '#c084fc', '#ff9800', '#00bcd4', '#e91e63'];
 const DEFAULT_HORSE_NAMES = [
@@ -16,7 +17,7 @@ function LandingScreen({ onCreate, onJoin, error, connected }) {
   if (view === 'join') {
     return (
       <div style={ls.card}>
-        <h1 style={ls.title}>Race Your Bets</h1>
+        <img src={logo} alt="Race Your Bets" style={{ maxWidth: 220, width: '70%', marginBottom: '0.75rem' }} />
         <p style={ls.subtitle}>Enter your name and the room code from the host screen.</p>
 
         <div style={ls.field}>
@@ -54,7 +55,7 @@ function LandingScreen({ onCreate, onJoin, error, connected }) {
 
   return (
     <div style={ls.card}>
-      <h1 style={ls.title}>Race Your Bets</h1>
+      <img src={logo} alt="Race Your Bets" style={{ maxWidth: 280, width: '80%', marginBottom: '0.75rem' }} />
       <p style={ls.subtitle}>A real-time multiplayer betting race game</p>
       <p style={{ fontSize: '0.75rem', margin: '0 0 2rem', color: connected ? '#4caf50' : '#f44336' }}>
         {connected ? '● Connected' : '● Not connected — is the server running?'}
@@ -114,7 +115,7 @@ function HostWaitingRoom({ roomData, onStartGame, onHostReady }) {
 
   return (
     <div style={hw.root}>
-      <h1 style={hw.title}>Race Your Bets</h1>
+      <img src={logo} alt="Race Your Bets" style={{ maxWidth: 380, width: '60%' }} />
 
       <div style={hw.codeSection}>
         <span style={hw.codeLabel}>Room Code</span>
