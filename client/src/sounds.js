@@ -55,7 +55,7 @@ export function startRandomSounds() {
   stopRandomSounds();
   remaining = [...RANDOM_SOUNDS].sort(() => Math.random() - 0.5);
   const schedule = () => {
-    const delay = 4000 + Math.random() * 2000;
+    const delay = 4000 + Math.random() * 4000;
     randomTimer = setTimeout(() => {
       play(nextFromBag());
       schedule();

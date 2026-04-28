@@ -9,51 +9,60 @@ const DEFAULT_HORSE_NAMES = [
 
 // ─── Landing screen ───────────────────────────────────────────────────────────
 function LandingScreen({ onCreate, onJoin, error, connected }) {
+  const [view, setView]         = useState('home'); // 'home' | 'join'
   const [name, setName]         = useState('');
   const [joinCode, setJoinCode] = useState('');
 
+  if (view === 'join') {
+    return (
+      <div style={ls.card}>
+        <h1 style={ls.title}>Race Your Bets</h1>
+        <p style={ls.subtitle}>Enter your name and the room code from the host screen.</p>
+
+        <div style={ls.field}>
+          <label>Your name</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && joinCode && onJoin(name.trim(), joinCode.trim())}
+            placeholder="e.g. FastEddie"
+            maxLength={20}
+            autoFocus
+          />
+        </div>
+
+        <div style={ls.field}>
+          <label>Room code</label>
+          <input
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === 'Enter' && joinCode && onJoin(name.trim(), joinCode.trim())}
+            placeholder="e.g. AB3K"
+            maxLength={4}
+          />
+        </div>
+
+        <div style={ls.row}>
+          <button onClick={() => onJoin(name.trim(), joinCode.trim())}>Join Game</button>
+          <button onClick={() => setView('home')} style={ls.secondaryBtn}>Back</button>
+        </div>
+
+        {error && <p style={ls.error}>{error}</p>}
+      </div>
+    );
+  }
+
   return (
     <div style={ls.card}>
-      <h1>Race Your Bets</h1>
+      <h1 style={ls.title}>Race Your Bets</h1>
       <p style={ls.subtitle}>A real-time multiplayer betting race game</p>
-      <p style={{ fontSize: '0.75rem', margin: '0 0 1rem' }}>
-        Server:{' '}
-        <span style={{ color: connected ? '#4caf50' : '#f44336', fontWeight: 'bold' }}>
-          {connected ? 'Connected' : 'Not connected — is the server running?'}
-        </span>
+      <p style={{ fontSize: '0.75rem', margin: '0 0 2rem', color: connected ? '#4caf50' : '#f44336' }}>
+        {connected ? '● Connected' : '● Not connected — is the server running?'}
       </p>
 
-      <div style={ls.field}>
-        <label>Your name</label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && (joinCode ? onJoin(name.trim(), joinCode.trim()) : onCreate(name.trim()))}
-          placeholder="e.g. FastEddie"
-          maxLength={20}
-          autoFocus
-        />
-      </div>
-
-      <div style={ls.field}>
-        <label>
-          Room code{' '}
-          <span style={ls.optional}>(leave blank to create a new room as host)</span>
-        </label>
-        <input
-          value={joinCode}
-          onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-          onKeyDown={(e) => e.key === 'Enter' && joinCode && onJoin(name.trim(), joinCode.trim())}
-          placeholder="e.g. AB3K"
-          maxLength={4}
-        />
-      </div>
-
-      <div style={ls.row}>
-        {joinCode.length > 0
-          ? <button onClick={() => onJoin(name.trim(), joinCode.trim())}>Join Game</button>
-          : <button onClick={() => onCreate(name.trim())}>Create Room (Host)</button>
-        }
+      <div style={ls.bigBtnRow}>
+        <button onClick={onCreate} style={ls.bigBtn}>🖥 Host</button>
+        <button onClick={() => setView('join')} style={ls.bigBtn}>🎮 Join</button>
       </div>
 
       {error && <p style={ls.error}>{error}</p>}
@@ -291,10 +300,9 @@ export default function Lobby({ mySocketId, onHostReady }) {
     };
   }, [mySocketId]);
 
-  function handleCreate(name) {
-    if (!name)             { setJoinError('Enter your name first.'); return; }
+  function handleCreate() {
     if (!socket.connected) { setJoinError('Not connected to server.'); return; }
-    socket.emit('create_room', { playerName: name });
+    socket.emit('create_room', { playerName: '' });
   }
 
   function handleJoin(name, code) {
@@ -312,6 +320,7 @@ export default function Lobby({ mySocketId, onHostReady }) {
         error={joinError}
         connected={connected}
       />
+
     );
   }
 
@@ -332,19 +341,23 @@ export default function Lobby({ mySocketId, onHostReady }) {
 
 // ─── Styles — landing / player ────────────────────────────────────────────────
 const ls = {
-  card:       { maxWidth: 480, margin: '2rem auto', padding: '2rem', background: '#1a1a1a', borderRadius: 8, border: '1px solid #333' },
-  subtitle:   { color: '#888', marginTop: 0, marginBottom: '1.5rem' },
-  optional:   { color: '#555', fontSize: '0.72rem' },
-  field:      { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: '1rem' },
-  row:        { display: 'flex', gap: '0.75rem', marginTop: '0.5rem' },
-  error:      { color: '#ff6b6b', marginTop: '0.75rem' },
-  hint:       { color: '#888', fontSize: '0.85rem', marginTop: '0.5rem' },
-  codeBox:    { display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#0f0f0f', border: '2px solid #f5c518', borderRadius: 8, padding: '1rem', marginBottom: '1.5rem' },
-  codeLabel:  { fontSize: '0.75rem', color: '#888', letterSpacing: 2, textTransform: 'uppercase' },
-  code:       { fontSize: '3rem', fontWeight: 'bold', color: '#f5c518', letterSpacing: 8 },
-  playerList: { listStyle: 'none', padding: 0, margin: 0 },
-  playerItem: { display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #2a2a2a' },
-  badge:      { color: '#f5c518', fontSize: '0.85rem' },
+  card:         { maxWidth: 480, margin: '0 auto', padding: '3rem 2rem', background: '#1a1a1a', borderRadius: 8, border: '1px solid #333', textAlign: 'center', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' },
+  title:        { margin: '0 0 0.5rem', fontSize: '2rem', color: '#f5c518', letterSpacing: 3 },
+  subtitle:     { color: '#888', marginTop: 0, marginBottom: '1rem' },
+  optional:     { color: '#555', fontSize: '0.72rem' },
+  field:        { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: '1rem', width: '100%', maxWidth: 320, textAlign: 'left' },
+  row:          { display: 'flex', gap: '0.75rem', marginTop: '0.5rem', justifyContent: 'center' },
+  error:        { color: '#ff6b6b', marginTop: '0.75rem' },
+  hint:         { color: '#888', fontSize: '0.85rem', marginTop: '0.5rem' },
+  bigBtnRow:    { display: 'flex', gap: '1.25rem', justifyContent: 'center', marginTop: '0.5rem' },
+  bigBtn:       { fontSize: '1.1rem', padding: '1rem 2.5rem', borderRadius: 10, minWidth: 130 },
+  secondaryBtn: { background: '#1a1a1a', color: '#888', border: '1px solid #333' },
+  codeBox:      { display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#0f0f0f', border: '2px solid #f5c518', borderRadius: 8, padding: '1rem', marginBottom: '1.5rem' },
+  codeLabel:    { fontSize: '0.75rem', color: '#888', letterSpacing: 2, textTransform: 'uppercase' },
+  code:         { fontSize: '3rem', fontWeight: 'bold', color: '#f5c518', letterSpacing: 8 },
+  playerList:   { listStyle: 'none', padding: 0, margin: 0 },
+  playerItem:   { display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #2a2a2a' },
+  badge:        { color: '#f5c518', fontSize: '0.85rem' },
 };
 
 // ─── Styles — host waiting room ───────────────────────────────────────────────

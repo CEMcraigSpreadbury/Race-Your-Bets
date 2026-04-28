@@ -459,11 +459,6 @@ function ChipTray({ held, usedChips, tokens, onSelect, onClear }) {
           </div>
         );
       })}
-      {held != null && (
-        <span onClick={onClear} style={{ fontSize: '0.75rem', color: '#666', cursor: 'pointer', marginLeft: 4, textDecoration: 'underline' }}>
-          cancel
-        </span>
-      )}
     </div>
   );
 }
@@ -553,7 +548,7 @@ function BetCell({ racer, betType, displayOdds, baseOdds, loss, occupant, isMe, 
 // ─── Betting grid ─────────────────────────────────────────────────────────────
 // Cells auto-size via flex so the grid fills whatever width it's given.
 // Column groups use flex: slotCount so each individual cell is the same width.
-const NAME_COL = 70; // px — horse name column
+const NAME_COL = 55; // px — horse name column
 const GRP_GAP  = 6;  // px — gap between SHOW / PLACE / WIN groups
 const CELL_GAP = 3;  // px — gap between cells within a group
 
@@ -1400,12 +1395,16 @@ function Confetti() {
 }
 
 // ─── Player result overlay ────────────────────────────────────────────────────
-function PlayerResult({ myPayout, racers, sideBets, raceId, totalRaces, onDismiss }) {
+function PlayerResult({ myPayout, racers, raceState, sideBets, raceId, totalRaces, onDismiss }) {
   if (!myPayout) return null;
   const won          = myPayout.delta > 0;
   const lost         = myPayout.delta < 0;
   const hasBets      = Object.keys(myPayout.bets ?? {}).length > 0;
   const hasSideBets  = Object.keys(myPayout.sideBets ?? {}).length > 0;
+  const top3 = raceState
+    ? [...racers].sort((a, b) => (raceState[b.id]?.position ?? 0) - (raceState[a.id]?.position ?? 0)).slice(0, 3)
+    : [];
+  const medals = ['🥇', '🥈', '🥉'];
 
   return (
     <>
@@ -1420,6 +1419,18 @@ function PlayerResult({ myPayout, racers, sideBets, raceId, totalRaces, onDismis
       <div style={{ fontSize: '0.8rem', color: '#555', textTransform: 'uppercase', letterSpacing: 2 }}>
         Race {raceId} of {totalRaces}
       </div>
+      {top3.length > 0 && (
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end' }}>
+          {top3.map((r, i) => (
+            <div key={r.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <span style={{ fontSize: i === 0 ? '1.6rem' : '1.2rem' }}>{medals[i]}</span>
+              <span style={{ color: r.color, fontSize: i === 0 ? '0.85rem' : '0.72rem', fontWeight: 'bold', textAlign: 'center' }}>
+                {r.name.split(' ')[0]}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ fontSize: '4rem' }}>{won ? '🎉' : lost ? '😬' : '🤷'}</div>
       <div style={{ fontSize: '4rem', fontWeight: 'bold', lineHeight: 1, color: won ? '#4caf50' : lost ? '#f44336' : '#888' }}>
         {won ? `+${myPayout.delta}` : lost ? String(myPayout.delta) : '±0'}
@@ -1457,13 +1468,28 @@ function PlayerResult({ myPayout, racers, sideBets, raceId, totalRaces, onDismis
 }
 
 // ─── Player standings — shown after dismissing result ─────────────────────────
-function PlayerStandings({ payouts, mySocketId, isLastRace }) {
+function PlayerStandings({ payouts, mySocketId, isLastRace, racers, raceState }) {
   if (!payouts?.length) return null;
   const sorted = [...payouts].sort((a, b) => b.finalTokens - a.finalTokens);
   const medals = ['🥇', '🥈', '🥉'];
+  const top3 = (raceState && racers)
+    ? [...racers].sort((a, b) => (raceState[b.id]?.position ?? 0) - (raceState[a.id]?.position ?? 0)).slice(0, 3)
+    : [];
 
   return (
     <div style={{ padding: '0.5rem 0' }}>
+      {top3.length > 0 && (
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', justifyContent: 'center', marginBottom: '1rem' }}>
+          {top3.map((r, i) => (
+            <div key={r.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <span style={{ fontSize: i === 0 ? '1.6rem' : '1.2rem' }}>{medals[i]}</span>
+              <span style={{ color: r.color, fontSize: i === 0 ? '0.85rem' : '0.72rem', fontWeight: 'bold', textAlign: 'center' }}>
+                {r.name.split(' ')[0]}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       <h3 style={{ color: '#888', textTransform: 'uppercase', letterSpacing: 2, fontSize: '0.8rem', textAlign: 'center', margin: '0 0 0.75rem' }}>
         {isLastRace ? 'Final Standings' : 'Standings'}
       </h3>
@@ -1729,12 +1755,22 @@ export default function Game({
             {/* Race track */}
             {(gamePhase === 'racing' || gamePhase === 'finished') && (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '1rem', padding: '0.5rem 0' }}>
-                {gamePhase === 'finished' && winner && (
-                  <div style={{ ...s.banner, borderColor: racerById(winner.id, racers).color }}>
-                    <span style={{ fontSize: '1.5rem' }}>🏆</span>
-                    <strong style={{ color: racerById(winner.id, racers).color, fontSize: '1.1rem' }}>{winner.name} wins!</strong>
-                  </div>
-                )}
+                {gamePhase === 'finished' && winner && (() => {
+                  const top3 = raceState
+                    ? [...racers].sort((a, b) => (raceState[b.id]?.position ?? 0) - (raceState[a.id]?.position ?? 0)).slice(0, 3)
+                    : [racerById(winner.id, racers)];
+                  const medals = ['🥇', '🥈', '🥉'];
+                  return (
+                    <div style={{ ...s.banner, borderColor: racerById(winner.id, racers).color, flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {top3.map((r, i) => (
+                        <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: '1.3rem' }}>{medals[i]}</span>
+                          <strong style={{ color: r.color, fontSize: '1rem' }}>{r.name}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
                 {gamePhase === 'racing' && (
                   <div style={{ display: 'flex', justifyContent: 'center', height: 260 }}>
                     {lastDraw && <DrawnCard key={cardFlipKey} draw={lastDraw} racers={racers} large />}
@@ -1798,6 +1834,7 @@ export default function Game({
         <PlayerResult
           myPayout={myPayout}
           racers={racers}
+          raceState={raceState}
           sideBets={sideBets}
           raceId={raceId}
           totalRaces={totalRaces}
@@ -1895,6 +1932,8 @@ export default function Game({
             payouts={payouts}
             mySocketId={mySocketId}
             isLastRace={isLastRace}
+            racers={racers}
+            raceState={raceState}
           />
         </div>
       )}
