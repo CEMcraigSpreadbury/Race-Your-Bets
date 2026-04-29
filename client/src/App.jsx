@@ -31,6 +31,7 @@ function App() {
   const [gameStartData, setGameStartData] = useState(null);
   const [musicPlaying, setMusicPlaying]   = useState(false);
   const audioRef                          = useRef(null);
+  const hasConnectedRef                   = useRef(false);
 
   useEffect(() => {
     const audio  = new Audio('/sounds/Bet Slip Boogie.mp3');
@@ -51,10 +52,23 @@ function App() {
     }
   }
 
+  // Auto-rejoin on socket reconnect (handles mobile backgrounding)
+  useEffect(() => {
+    const onConnect = () => {
+      if (!hasConnectedRef.current) { hasConnectedRef.current = true; return; }
+      const raw = sessionStorage.getItem('ryb_session');
+      if (!raw) return;
+      const { roomCode, playerName } = JSON.parse(raw);
+      if (roomCode && playerName) socket.emit('rejoin_room', { roomCode, playerName });
+    };
+    socket.on('connect', onConnect);
+    return () => socket.off('connect', onConnect);
+  }, []);
+
   useEffect(() => {
     const onConnected   = ({ id }) => setMySocketId(id);
     const onGameStarted = (data) => {
-      setGameStartData({
+      const parsed = {
         roomCode:       data?.roomCode       ?? '',
         racers:         data?.racers         ?? [],
         baseDeck:       data?.baseDeck       ?? [],
@@ -69,12 +83,19 @@ function App() {
         trackLength:    data?.trackLength    ?? 10,
         sideBets:       data?.sideBets       ?? [],
         sponsorships:   data?.sponsorships   ?? [],
-      });
+      };
+      setGameStartData(parsed);
       setGamePhase('game');
+      // Store session for reconnect recovery (players only)
+      if (!parsed.isHost) {
+        const me = (parsed.players ?? []).find((p) => p.id === socket.id);
+        if (me) sessionStorage.setItem('ryb_session', JSON.stringify({ roomCode: parsed.roomCode, playerName: me.name }));
+      }
     };
     const onGameOver = () => {
       setGamePhase('lobby');
       setGameStartData(null);
+      sessionStorage.removeItem('ryb_session');
     };
 
     socket.on('connected',    onConnected);

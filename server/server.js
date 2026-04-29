@@ -778,6 +778,34 @@ io.on('connection', (socket) => {
     setTimeout(() => startRace(roomCode), 4500);
   });
 
+  socket.on('rejoin_room', ({ roomCode, playerName }) => {
+    const room = rooms[roomCode];
+    if (!room) { socket.emit('rejoin_failed', { message: 'Room not found.' }); return; }
+
+    const player = room.players.find((p) => p.name === playerName);
+    if (!player) { socket.emit('rejoin_failed', { message: 'Player not found in room.' }); return; }
+
+    // Cancel grace-period removal
+    if (player.disconnectTimer) { clearTimeout(player.disconnectTimer); player.disconnectTimer = null; }
+    player.disconnected = false;
+
+    // Migrate sponsorship key to new socket id
+    if (room.sponsorships?.[player.id]) {
+      room.sponsorships[socket.id] = room.sponsorships[player.id];
+      delete room.sponsorships[player.id];
+    }
+
+    player.id = socket.id;
+    socket.join(roomCode);
+    socket.data.roomCode   = roomCode;
+    socket.data.playerName = playerName;
+    socket.data.isHost     = false;
+
+    console.log(`[Room ${roomCode}] ${playerName} rejoined`);
+    socket.emit('rejoined', { state: room.state });
+    broadcastRoomUpdate(roomCode);
+  });
+
   socket.on('disconnect', () => {
     const { roomCode, playerName, isHost } = socket.data;
     if (!roomCode || !rooms[roomCode]) return;
@@ -789,10 +817,22 @@ io.on('connection', (socket) => {
       delete rooms[roomCode];
       io.to(roomCode).emit('room_closed', { message: 'The host disconnected.' });
       console.log(`[Room ${roomCode}] Closed (host left)`);
-    } else {
+    } else if (room.state === 'lobby') {
       room.players = room.players.filter((p) => p.id !== socket.id);
       console.log(`[-] ${playerName} left room ${roomCode}`);
       broadcastRoomUpdate(roomCode);
+    } else {
+      // During a game: grace period before removing — lets mobile players rejoin after backgrounding
+      const player = room.players.find((p) => p.id === socket.id);
+      if (player) {
+        player.disconnected = true;
+        player.disconnectTimer = setTimeout(() => {
+          room.players = room.players.filter((p) => p.name !== playerName);
+          console.log(`[-] ${playerName} removed from ${roomCode} after grace period`);
+          broadcastRoomUpdate(roomCode);
+        }, 90000);
+      }
+      console.log(`[-] ${playerName} disconnected from ${roomCode} (90s grace period)`);
     }
   });
 });
