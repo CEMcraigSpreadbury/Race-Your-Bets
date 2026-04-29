@@ -279,7 +279,7 @@ function RaceTrack({ racers, raceState, pulsingRacer, trackLength, lockedRacers 
   }
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, height: '100%' }}>
       {racers.map((racer) => {
         const rs         = raceState[racer.id] ?? { position: 0, status: 'active' };
         const pct        = Math.min((rs.position / trackLength) * 100, 100);
@@ -291,7 +291,7 @@ function RaceTrack({ racers, raceState, pulsingRacer, trackLength, lockedRacers 
         const rank       = rankOf[racer.id];
 
         return (
-          <div key={racer.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <div key={racer.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minHeight: 28 }}>
 
             {/* Horse name + position */}
             <div style={{ width: 120, flexShrink: 0 }}>
@@ -302,7 +302,7 @@ function RaceTrack({ racers, raceState, pulsingRacer, trackLength, lockedRacers 
             </div>
 
             {/* Track bar — outer wrapper is position:relative so emoji + finish line escape overflow */}
-            <div style={{ flex: 1, position: 'relative', height: 30 }}>
+            <div style={{ flex: 1, position: 'relative', height: '100%', minHeight: 28 }}>
 
               {/* Inner bar (overflow hidden for fill + milestones) */}
               <div style={{
@@ -1724,11 +1724,11 @@ export default function Game({
       <>
         <RaceCountdown prep={racePrep} />
 
-        <div style={{ minHeight: '100vh', background: '#0a0a0a', padding: '0.3rem 0.5rem', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <div style={{ height: '100dvh', background: '#0a0a0a', padding: '0.3rem 0.5rem', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxSizing: 'border-box' }}>
+          <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
 
-            <div style={s.header}>
-              <h1 style={{ margin: 0, fontSize: '1.6rem', color: '#f5c518', letterSpacing: 2 }}>Race Your Bets</h1>
+            <div style={{ ...s.header, flexShrink: 0 }}>
+              <h1 style={{ margin: 0, fontSize: 'clamp(1rem, 3vw, 1.6rem)', color: '#f5c518', letterSpacing: 2 }}>Race Your Bets</h1>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <span style={{ color: '#555', fontSize: '0.8rem' }}>Race {raceId}/{totalRaces}</span>
                 <span style={s.roomBadge}>{roomCode}</span>
@@ -1774,14 +1774,14 @@ export default function Game({
 
             {/* Race track */}
             {(gamePhase === 'racing' || gamePhase === 'finished') && (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '1rem', padding: '0.5rem 0' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, gap: '0.5rem', padding: '0.25rem 0' }}>
                 {gamePhase === 'finished' && winner && (() => {
                   const top3 = raceState
                     ? [...racers].sort((a, b) => (raceState[b.id]?.position ?? 0) - (raceState[a.id]?.position ?? 0)).slice(0, 3)
                     : [racerById(winner.id, racers)];
                   const medals = ['🥇', '🥈', '🥉'];
                   return (
-                    <div style={{ ...s.banner, borderColor: racerById(winner.id, racers).color, flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center' }}>
+                    <div style={{ ...s.banner, borderColor: racerById(winner.id, racers).color, flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center', flexShrink: 0 }}>
                       {top3.map((r, i) => (
                         <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={{ fontSize: '1.3rem' }}>{medals[i]}</span>
@@ -1791,12 +1791,17 @@ export default function Game({
                     </div>
                   );
                 })()}
-                {gamePhase === 'racing' && (
-                  <div style={{ display: 'flex', justifyContent: 'center', height: 190 }}>
-                    {lastDraw && <DrawnCard key={cardFlipKey} draw={lastDraw} racers={racers} large />}
+                {/* Landscape layout: card left, track right */}
+                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'row', gap: '0.75rem', alignItems: 'center' }}>
+                  {gamePhase === 'racing' && lastDraw && (
+                    <div style={{ flexShrink: 0, alignSelf: 'center' }}>
+                      <DrawnCard key={cardFlipKey} draw={lastDraw} racers={racers} large />
+                    </div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <RaceTrack racers={racers} raceState={raceState} pulsingRacer={pulsingRacer} trackLength={trackLength ?? 10} lockedRacers={lockedRacers} />
                   </div>
-                )}
-                <RaceTrack racers={racers} raceState={raceState} pulsingRacer={pulsingRacer} trackLength={trackLength ?? 10} lockedRacers={lockedRacers} />
+                </div>
               </div>
             )}
 
