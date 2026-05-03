@@ -906,7 +906,7 @@ function HorseCarousel({ racers, selected, onSelect }) {
 
 // ─── Sponsor panel ────────────────────────────────────────────────────────────
 function SponsorPanel({ racers, tokens, mySponsorship, allSponsorships, onSponsor }) {
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState(racers[0]?.id ?? null);
   const [amount, setAmount]     = useState(1);
   const K = racers.length;
 

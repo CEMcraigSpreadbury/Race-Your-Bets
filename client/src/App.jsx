@@ -58,8 +58,9 @@ function App() {
       if (!hasConnectedRef.current) { hasConnectedRef.current = true; return; }
       const raw = sessionStorage.getItem('ryb_session');
       if (!raw) return;
-      const { roomCode, playerName } = JSON.parse(raw);
-      if (roomCode && playerName) socket.emit('rejoin_room', { roomCode, playerName });
+      const { roomCode, playerName, isHost } = JSON.parse(raw);
+      if (isHost && roomCode) socket.emit('rejoin_room', { roomCode, isHost: true });
+      else if (roomCode && playerName) socket.emit('rejoin_room', { roomCode, playerName });
     };
     socket.on('connect', onConnect);
     return () => socket.off('connect', onConnect);
@@ -86,8 +87,10 @@ function App() {
       };
       setGameStartData(parsed);
       setGamePhase('game');
-      // Store session for reconnect recovery (players only)
-      if (!parsed.isHost) {
+      // Store session for reconnect recovery
+      if (parsed.isHost) {
+        sessionStorage.setItem('ryb_session', JSON.stringify({ roomCode: parsed.roomCode, isHost: true }));
+      } else {
         const me = (parsed.players ?? []).find((p) => p.id === socket.id);
         if (me) sessionStorage.setItem('ryb_session', JSON.stringify({ roomCode: parsed.roomCode, playerName: me.name }));
       }

@@ -778,9 +778,21 @@ io.on('connection', (socket) => {
     setTimeout(() => startRace(roomCode), 4500);
   });
 
-  socket.on('rejoin_room', ({ roomCode, playerName }) => {
+  socket.on('rejoin_room', ({ roomCode, playerName, isHost }) => {
     const room = rooms[roomCode];
     if (!room) { socket.emit('rejoin_failed', { message: 'Room not found.' }); return; }
+
+    if (isHost) {
+      const oldSocket = io.sockets.sockets.get(room.hostId);
+      if (oldSocket?.connected) { socket.emit('rejoin_failed', { message: 'Host already connected.' }); return; }
+      room.hostId = socket.id;
+      socket.join(roomCode);
+      socket.data.roomCode = roomCode;
+      socket.data.isHost   = true;
+      console.log(`[Room ${roomCode}] Host rejoined`);
+      socket.emit('rejoined', { state: room.state });
+      return;
+    }
 
     const player = room.players.find((p) => p.name === playerName);
     if (!player) { socket.emit('rejoin_failed', { message: 'Player not found in room.' }); return; }
