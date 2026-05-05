@@ -1607,7 +1607,7 @@ export default function Game({
   const drinkTimerRef    = useRef(null);
   const lastDrinkTimeRef = useRef(0);
 
-  const DRINK_COOLDOWN_MS = 50000; // minimum 50s between any two drink prompts
+  const DRINK_COOLDOWN_MS = 30000; // minimum 30s between any two drink prompts
 
   function showDrink() {
     if (!isHost) return;
@@ -1712,7 +1712,7 @@ export default function Game({
       if (!isHost && drinkingModeRef.current) {
         const myP = p?.find((pay) => pay.playerId === mySocketId);
         const lost = myP && myP.delta < 0;
-        const msg = lost ? 'Finish Your Drink! 🍺' : 'Drink! 🍺';
+        const msg = lost ? 'Finish Your Drink!' : 'Drink!';
         setDrinkPrompt(msg);
         clearTimeout(drinkDismissRef.current);
         drinkDismissRef.current = setTimeout(() => setDrinkPrompt(null), 8000);
