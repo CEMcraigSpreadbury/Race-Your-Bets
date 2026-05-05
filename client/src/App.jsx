@@ -84,6 +84,7 @@ function App() {
         trackLength:    data?.trackLength    ?? 10,
         sideBets:       data?.sideBets       ?? [],
         sponsorships:   data?.sponsorships   ?? [],
+        drinkingMode:   data?.drinkingMode   ?? false,
       };
       setGameStartData(parsed);
       setGamePhase('game');
@@ -132,6 +133,7 @@ function App() {
           trackLength={gameStartData.trackLength ?? 10}
           sideBets={gameStartData.sideBets ?? []}
           initialSponsorships={gameStartData.sponsorships ?? []}
+          initialDrinkingMode={gameStartData.drinkingMode ?? false}
         />
       </>
     );

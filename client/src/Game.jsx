@@ -1574,7 +1574,7 @@ export default function Game({
   roomCode, racers, mySocketId, baseDeck,
   players: initialPlayers, initialTurnData, initialDraftOptions,
   startingTokens, isHost, raceId, totalRaces, trackLength, sideBets,
-  initialSponsorships,
+  initialSponsorships, initialDrinkingMode,
 }) {
   const [turnData, setTurnData]               = useState(initialTurnData ?? null);
   const [myOptions, setMyOptions]             = useState(initialDraftOptions ?? null);
@@ -1602,71 +1602,35 @@ export default function Game({
   const isLastRace    = raceId >= totalRaces;
   const [deckExpanded, setDeckExpanded] = useState(false);
 
-  const [drinkingMode, setDrinkingMode] = useState(false);
   const [drinkPrompt, setDrinkPrompt]   = useState(null);
-  const drinkingModeRef = useRef(false);
+  const drinkingModeRef = useRef(!!initialDrinkingMode);
   const drinkDismissRef = useRef(null);
   const drinkTimerRef   = useRef(null);
 
-  function showDrink(msg) {
-    setDrinkPrompt(msg);
-    clearTimeout(drinkDismissRef.current);
-    drinkDismissRef.current = setTimeout(() => setDrinkPrompt(null), 5000);
+  function showDrink() {
+    if (isHost) socket.emit('drink_prompt', { roomCode });
   }
 
-  function toggleDrinkingMode() {
-    const next = !drinkingModeRef.current;
-    drinkingModeRef.current = next;
-    setDrinkingMode(next);
-    if (!next) {
-      clearTimeout(drinkTimerRef.current);
-      clearTimeout(drinkDismissRef.current);
-      setDrinkPrompt(null);
-    }
+  function isDrinkCard(card) {
+    return ['stumble','double','boost','global_forward_1','global_forward_2','global_back_1','photo_finish','slipstream','tailwind'].includes(card.type);
   }
 
-  function drinkMsgForCard(card) {
-    const name = racers.find((r) => r.id === card.racerId)?.name?.split(' ')[0] ?? '';
-    switch (card.type) {
-      case 'stumble':          return `${name} stumbles! Their backers drink 🍺`;
-      case 'double':           return `DOUBLE for ${name}! Take a victory sip 🍺`;
-      case 'boost':            return `${name} gets a boost! Celebrate with a sip 🍺`;
-      case 'global_forward_1': return 'All horses forward! Quick sip all round 🍺';
-      case 'global_forward_2': return 'STAMPEDE! Everyone drinks two sips 🍺🍺';
-      case 'global_back_1':    return 'All horses BACK! Everyone takes a sip 🍺';
-      case 'photo_finish':     return 'PHOTO FINISH incoming! Suspense sip 📷🍺';
-      case 'slipstream':       return '2nd place surges! Underdogs drink 💨🍺';
-      case 'tailwind':         return 'Last place gets a gust! Drink for the comeback 🌬️🍺';
-      default:                 return null;
-    }
-  }
-
-
-  // Random drink prompts during racing when drinking mode is on
+  // Random drink prompts during racing — host emits, server broadcasts to room
   useEffect(() => {
-    if (!isHost || !drinkingMode || gamePhase !== 'racing') {
+    if (!isHost || !drinkingModeRef.current || gamePhase !== 'racing') {
       clearTimeout(drinkTimerRef.current);
       return;
     }
-    const RANDOM_DRINKS = [
-      "Keep those drinks flowing!",
-      "If you haven't sipped in a while… fix that",
-      "Toast to the horses! 🐎",
-      "Everyone with an active bet — take a sip!",
-      "Whoever is currently losing — drink for luck!",
-      "Raise a glass to the jockeys!",
-      "No reason needed — drink!",
-    ];
     const schedule = () => {
       drinkTimerRef.current = setTimeout(() => {
         if (!drinkingModeRef.current) return;
-        showDrink(RANDOM_DRINKS[Math.floor(Math.random() * RANDOM_DRINKS.length)]);
+        showDrink();
         schedule();
-      }, 40000 + Math.random() * 50000); // 40–90 seconds
+      }, 30000 + Math.random() * 45000); // 30–75 seconds
     };
     schedule();
     return () => clearTimeout(drinkTimerRef.current);
-  }, [isHost, drinkingMode, gamePhase]);
+  }, [isHost, gamePhase]);
 
   useEffect(() => {
     const onTurnUpdate    = (data) => { setTurnData(data); setMyOptions(null); };
@@ -1705,10 +1669,7 @@ export default function Game({
         setTimeout(() => setPulsingRacer(null), 350);
       }
 
-      if (isHost && drinkingModeRef.current) {
-        const msg = drinkMsgForCard(card);
-        if (msg) showDrink(msg);
-      }
+      if (isHost && drinkingModeRef.current && isDrinkCard(card)) showDrink();
     };
 
     const onOddsUpdate      = ({ betSummary: summary, lockedRacers: lr }) => {
@@ -1730,13 +1691,29 @@ export default function Game({
     };
     const onSponsorshipsUpdate = ({ sponsorships }) => setAllSponsorships(sponsorships ?? []);
     const onSponsorError       = ({ message }) => alert(message);
+    const onDrinkPrompt        = ({ message }) => {
+      setDrinkPrompt(message);
+      clearTimeout(drinkDismissRef.current);
+      drinkDismissRef.current = setTimeout(() => setDrinkPrompt(null), 5000);
+    };
 
     const onRaceFinished = ({ winner: w, racerStates, payouts: p, betSummary: summary }) => {
       setRaceState(racerStates);
       setWinner(w);
       setGamePhase('finished');
       if (isHost) { stopRandomSounds(); playRaceFinish(); }
-      if (isHost && drinkingModeRef.current) showDrink(`${w?.name ?? 'Someone'} wins! Bet losers — you're drinking! 🏆🍺`);
+      if (drinkingModeRef.current) {
+        if (isHost) {
+          showDrink();
+        } else {
+          const myP = p?.find((pay) => pay.playerId === mySocketId);
+          const lost = myP && myP.delta < 0;
+          const msg = lost ? 'Finish Your Drink! 🍺' : 'Drink! 🍺';
+          setDrinkPrompt(msg);
+          clearTimeout(drinkDismissRef.current);
+          drinkDismissRef.current = setTimeout(() => setDrinkPrompt(null), 8000);
+        }
+      }
       if (p)       { setPayouts(p); if (!isHost) setShowResult(true); }
       if (summary) setBetSummary(summary);
     };
@@ -1753,6 +1730,7 @@ export default function Game({
     socket.on('sponsorships_update', onSponsorshipsUpdate);
     socket.on('sponsor_error',      onSponsorError);
     socket.on('race_finished',      onRaceFinished);
+    socket.on('drink_prompt',       onDrinkPrompt);
 
     return () => {
       socket.off('turn_update',        onTurnUpdate);
@@ -1767,6 +1745,7 @@ export default function Game({
       socket.off('sponsorships_update', onSponsorshipsUpdate);
       socket.off('sponsor_error',      onSponsorError);
       socket.off('race_finished',      onRaceFinished);
+      socket.off('drink_prompt',       onDrinkPrompt);
       if (isHost) stopRandomSounds();
     };
   }, [isHost]);
@@ -1828,18 +1807,7 @@ export default function Game({
             <div style={s.header}>
               <h1 style={{ margin: 0, fontSize: '1.6rem', color: '#f5c518', letterSpacing: 2 }}>Race Your Bets</h1>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button
-                  onClick={toggleDrinkingMode}
-                  style={{
-                    padding: '4px 12px', borderRadius: 6, fontSize: '0.78rem',
-                    background: drinkingMode ? '#2d1200' : '#1a1a1a',
-                    border: `1px solid ${drinkingMode ? '#f59518' : '#333'}`,
-                    color: drinkingMode ? '#f59518' : '#555',
-                    fontWeight: drinkingMode ? 'bold' : 'normal',
-                  }}
-                >
-                  🍺 {drinkingMode ? 'Drinking ON' : 'Drinking'}
-                </button>
+                {initialDrinkingMode && <span style={{ fontSize: '0.78rem', color: '#f59518' }}>🍺 Drinking Mode</span>}
                 <span style={{ color: '#555', fontSize: '0.8rem' }}>Race {raceId}/{totalRaces}</span>
                 <span style={s.roomBadge}>{roomCode}</span>
               </div>
@@ -1960,6 +1928,8 @@ export default function Game({
   // ── Player / phone view ─────────────────────────────────────────────────────
   return (
     <>
+      <DrinkOverlay prompt={drinkPrompt} onDismiss={() => setDrinkPrompt(null)} />
+
       {showResult && myPayout && (
         <PlayerResult
           myPayout={myPayout}

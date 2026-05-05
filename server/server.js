@@ -300,6 +300,7 @@ function beginGame(roomCode, preserveTokens = false) {
     roomCode, racers, baseDeck: room.baseDeck, players: room.players, turnData,
     isHost: true, raceId: room.raceId, totalRaces: room.totalRaces,
     trackLength, startingTokens: STARTING_TOKENS, betTypes, sideBets: publicSideBets, sponsorships,
+    drinkingMode: room.drinkingMode ?? false,
   });
 
   room.players.forEach((p) => {
@@ -308,6 +309,7 @@ function beginGame(roomCode, preserveTokens = false) {
       draftOptions: p.id === firstPlayer.id ? room.currentOptions : null,
       isHost: false, raceId: room.raceId, totalRaces: room.totalRaces,
       trackLength, startingTokens: p.tokens, betTypes, sideBets: publicSideBets, sponsorships,
+      drinkingMode: room.drinkingMode ?? false,
     });
   });
 
@@ -625,6 +627,7 @@ io.on('connection', (socket) => {
     room.totalRaces   = room.settings.totalRaces;
     room.trackLength  = room.settings.trackLength;
     room.cardInterval = room.settings.cardInterval;
+    room.drinkingMode = !!settings?.drinkingMode;
     room.raceId      = 0;
 
     beginGame(roomCode, false);
@@ -776,6 +779,12 @@ io.on('connection', (socket) => {
 
     io.to(roomCode).emit('race_starting', { deckSize: room.deck.length });
     setTimeout(() => startRace(roomCode), 4500);
+  });
+
+  socket.on('drink_prompt', ({ roomCode }) => {
+    const room = rooms[roomCode];
+    if (!room || socket.id !== room.hostId) return;
+    io.to(roomCode).emit('drink_prompt', { message: 'Drink!' });
   });
 
   socket.on('rejoin_room', ({ roomCode, playerName, isHost }) => {

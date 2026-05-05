@@ -92,7 +92,8 @@ function HostWaitingRoom({ roomData, onStartGame, onHostReady }) {
   const [totalRaces, setTotalRaces]     = useState(initSettings?.totalRaces ?? 3);
   const [trackLength, setTrackLength]   = useState(initSettings?.trackLength ?? 20);
   const [cardInterval, setCardInterval] = useState(initSettings?.cardInterval ?? 1500);
-  const [numHorses, setNumHorses]     = useState(initSettings?.horses?.length ?? 9);
+  const [numHorses, setNumHorses]       = useState(initSettings?.horses?.length ?? 9);
+  const [drinkingMode, setDrinkingMode] = useState(false);
   const [horseNames, setHorseNames]   = useState(() =>
     Array.from({ length: initSettings?.horses?.length ?? 9 }, (_, i) =>
       initSettings?.horses?.[i]?.name ?? DEFAULT_HORSE_NAMES[i] ?? `Horse ${i + 1}`
@@ -110,7 +111,7 @@ function HostWaitingRoom({ roomData, onStartGame, onHostReady }) {
   }
 
   function handleStartGame() {
-    onStartGame({ totalRaces, numHorses, horseNames, trackLength, cardInterval });
+    onStartGame({ totalRaces, numHorses, horseNames, trackLength, cardInterval, drinkingMode });
   }
 
   return (
@@ -195,6 +196,23 @@ function HostWaitingRoom({ roomData, onStartGame, onHostReady }) {
             ))}
           </div>
           <span style={hw.settingsHint}>{cardInterval / 1000}s per card</span>
+        </div>
+
+        <div style={hw.settingsRow}>
+          <span style={hw.settingsLabel}>Drinking</span>
+          <button
+            onClick={() => setDrinkingMode((v) => !v)}
+            style={{
+              padding: '5px 18px', borderRadius: 6, fontSize: '0.82rem',
+              background: drinkingMode ? '#2d1200' : '#1a1a1a',
+              color:      drinkingMode ? '#f59518' : '#555',
+              border:     `1px solid ${drinkingMode ? '#f59518' : '#333'}`,
+              fontWeight: drinkingMode ? 'bold' : 'normal',
+            }}
+          >
+            🍺 {drinkingMode ? 'ON' : 'OFF'}
+          </button>
+          <span style={hw.settingsHint}>{drinkingMode ? 'Drink prompts during race' : 'No drink prompts'}</span>
         </div>
 
         <div style={{ marginTop: '1rem' }}>
