@@ -198,7 +198,7 @@ function adjustOdds(baseOdds, racerStake, totalStake, numRacers) {
   if (totalStake === 0) return baseOdds;
   const avgStake = totalStake / numRacers;
   const ratio    = racerStake / avgStake;          // 1 = average
-  const factor   = Math.max(0.5, Math.min(1.5, 1 + (1 - ratio) * 0.3));
+  const factor   = Math.max(0.8, Math.min(1.2, 1 + (1 - ratio) * 0.15));
   return Math.max(2, Math.round(baseOdds * factor));
 }
 
