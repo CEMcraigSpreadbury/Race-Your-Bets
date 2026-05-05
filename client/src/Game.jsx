@@ -258,6 +258,31 @@ function DrawnCard({ draw, racers, compact, large }) {
   );
 }
 
+// ─── Drinking mode overlay ────────────────────────────────────────────────────
+function DrinkOverlay({ prompt, onDismiss }) {
+  if (!prompt) return null;
+  return (
+    <div
+      onClick={onDismiss}
+      style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 3000,
+        background: 'linear-gradient(180deg, #1a0800 0%, #2d1200 100%)',
+        borderBottom: '3px solid #f59518',
+        padding: '0.85rem 1.5rem',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem',
+        animation: 'drinkSlideDown 0.28s ease',
+        cursor: 'pointer',
+      }}
+    >
+      <span style={{ fontSize: '1.8rem' }}>🍺</span>
+      <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#f5c518', textAlign: 'center', lineHeight: 1.3 }}>
+        {prompt}
+      </span>
+      <span style={{ fontSize: '1.8rem' }}>🍺</span>
+    </div>
+  );
+}
+
 // ─── Race track ───────────────────────────────────────────────────────────────
 const RANK_MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -1577,6 +1602,71 @@ export default function Game({
   const isLastRace    = raceId >= totalRaces;
   const [deckExpanded, setDeckExpanded] = useState(false);
 
+  const [drinkingMode, setDrinkingMode] = useState(false);
+  const [drinkPrompt, setDrinkPrompt]   = useState(null);
+  const drinkingModeRef = useRef(false);
+  const drinkDismissRef = useRef(null);
+  const drinkTimerRef   = useRef(null);
+
+  function showDrink(msg) {
+    setDrinkPrompt(msg);
+    clearTimeout(drinkDismissRef.current);
+    drinkDismissRef.current = setTimeout(() => setDrinkPrompt(null), 5000);
+  }
+
+  function toggleDrinkingMode() {
+    const next = !drinkingModeRef.current;
+    drinkingModeRef.current = next;
+    setDrinkingMode(next);
+    if (!next) {
+      clearTimeout(drinkTimerRef.current);
+      clearTimeout(drinkDismissRef.current);
+      setDrinkPrompt(null);
+    }
+  }
+
+  function drinkMsgForCard(card) {
+    const name = racers.find((r) => r.id === card.racerId)?.name?.split(' ')[0] ?? '';
+    switch (card.type) {
+      case 'stumble':          return `${name} stumbles! Their backers drink 🍺`;
+      case 'double':           return `DOUBLE for ${name}! Take a victory sip 🍺`;
+      case 'boost':            return `${name} gets a boost! Celebrate with a sip 🍺`;
+      case 'global_forward_1': return 'All horses forward! Quick sip all round 🍺';
+      case 'global_forward_2': return 'STAMPEDE! Everyone drinks two sips 🍺🍺';
+      case 'global_back_1':    return 'All horses BACK! Everyone takes a sip 🍺';
+      case 'photo_finish':     return 'PHOTO FINISH incoming! Suspense sip 📷🍺';
+      case 'slipstream':       return '2nd place surges! Underdogs drink 💨🍺';
+      case 'tailwind':         return 'Last place gets a gust! Drink for the comeback 🌬️🍺';
+      default:                 return null;
+    }
+  }
+
+
+  // Random drink prompts during racing when drinking mode is on
+  useEffect(() => {
+    if (!isHost || !drinkingMode || gamePhase !== 'racing') {
+      clearTimeout(drinkTimerRef.current);
+      return;
+    }
+    const RANDOM_DRINKS = [
+      "Keep those drinks flowing!",
+      "If you haven't sipped in a while… fix that",
+      "Toast to the horses! 🐎",
+      "Everyone with an active bet — take a sip!",
+      "Whoever is currently losing — drink for luck!",
+      "Raise a glass to the jockeys!",
+      "No reason needed — drink!",
+    ];
+    const schedule = () => {
+      drinkTimerRef.current = setTimeout(() => {
+        if (!drinkingModeRef.current) return;
+        showDrink(RANDOM_DRINKS[Math.floor(Math.random() * RANDOM_DRINKS.length)]);
+        schedule();
+      }, 40000 + Math.random() * 50000); // 40–90 seconds
+    };
+    schedule();
+    return () => clearTimeout(drinkTimerRef.current);
+  }, [isHost, drinkingMode, gamePhase]);
 
   useEffect(() => {
     const onTurnUpdate    = (data) => { setTurnData(data); setMyOptions(null); };
@@ -1614,6 +1704,11 @@ export default function Game({
         setPulsingRacer(movedRacerId);
         setTimeout(() => setPulsingRacer(null), 350);
       }
+
+      if (isHost && drinkingModeRef.current) {
+        const msg = drinkMsgForCard(card);
+        if (msg) showDrink(msg);
+      }
     };
 
     const onOddsUpdate      = ({ betSummary: summary, lockedRacers: lr }) => {
@@ -1641,6 +1736,7 @@ export default function Game({
       setWinner(w);
       setGamePhase('finished');
       if (isHost) { stopRandomSounds(); playRaceFinish(); }
+      if (isHost && drinkingModeRef.current) showDrink(`${w?.name ?? 'Someone'} wins! Bet losers — you're drinking! 🏆🍺`);
       if (p)       { setPayouts(p); if (!isHost) setShowResult(true); }
       if (summary) setBetSummary(summary);
     };
@@ -1724,12 +1820,26 @@ export default function Game({
       <>
         <RaceCountdown prep={racePrep} />
 
+        <DrinkOverlay prompt={drinkPrompt} onDismiss={() => setDrinkPrompt(null)} />
+
         <div style={{ minHeight: '100vh', background: '#0a0a0a', padding: '0.3rem 0.5rem', display: 'flex', flexDirection: 'column' }}>
           <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', flex: 1 }}>
 
             <div style={s.header}>
               <h1 style={{ margin: 0, fontSize: '1.6rem', color: '#f5c518', letterSpacing: 2 }}>Race Your Bets</h1>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  onClick={toggleDrinkingMode}
+                  style={{
+                    padding: '4px 12px', borderRadius: 6, fontSize: '0.78rem',
+                    background: drinkingMode ? '#2d1200' : '#1a1a1a',
+                    border: `1px solid ${drinkingMode ? '#f59518' : '#333'}`,
+                    color: drinkingMode ? '#f59518' : '#555',
+                    fontWeight: drinkingMode ? 'bold' : 'normal',
+                  }}
+                >
+                  🍺 {drinkingMode ? 'Drinking ON' : 'Drinking'}
+                </button>
                 <span style={{ color: '#555', fontSize: '0.8rem' }}>Race {raceId}/{totalRaces}</span>
                 <span style={s.roomBadge}>{roomCode}</span>
               </div>

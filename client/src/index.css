@@ -63,3 +63,9 @@ code { background: #1e1e1e; padding: 2px 6px; border-radius: 3px; }
   100% { transform: rotateY(360deg) scale(1);   }
 }
 
+/* ── Drinking mode banner slide-down ─────────────────────────────────────── */
+@keyframes drinkSlideDown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+
