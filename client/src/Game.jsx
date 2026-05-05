@@ -1602,16 +1602,23 @@ export default function Game({
   const [deckExpanded, setDeckExpanded] = useState(false);
 
   const [drinkPrompt, setDrinkPrompt]   = useState(null);
-  const drinkingModeRef = useRef(!!initialDrinkingMode);
-  const drinkDismissRef = useRef(null);
-  const drinkTimerRef   = useRef(null);
+  const drinkingModeRef  = useRef(!!initialDrinkingMode);
+  const drinkDismissRef  = useRef(null);
+  const drinkTimerRef    = useRef(null);
+  const lastDrinkTimeRef = useRef(0);
+
+  const DRINK_COOLDOWN_MS = 50000; // minimum 50s between any two drink prompts
 
   function showDrink() {
-    if (isHost) socket.emit('drink_prompt', { roomCode });
+    if (!isHost) return;
+    const now = Date.now();
+    if (now - lastDrinkTimeRef.current < DRINK_COOLDOWN_MS) return;
+    lastDrinkTimeRef.current = now;
+    socket.emit('drink_prompt', { roomCode });
   }
 
   function isDrinkCard(card) {
-    return ['stumble','double','boost','global_forward_1','global_forward_2','global_back_1','photo_finish','slipstream','tailwind'].includes(card.type);
+    return ['stumble','global_forward_1','global_forward_2','global_back_1','photo_finish','slipstream','tailwind'].includes(card.type);
   }
 
   // Random drink prompts during racing — host emits, server broadcasts to room
@@ -1625,7 +1632,7 @@ export default function Game({
         if (!drinkingModeRef.current) return;
         showDrink();
         schedule();
-      }, 30000 + Math.random() * 45000); // 30–75 seconds
+      }, 50000 + Math.random() * 40000); // 50–90 seconds
     };
     schedule();
     return () => clearTimeout(drinkTimerRef.current);
