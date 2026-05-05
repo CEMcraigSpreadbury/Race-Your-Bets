@@ -265,20 +265,19 @@ function DrinkOverlay({ prompt, onDismiss }) {
     <div
       onClick={onDismiss}
       style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 3000,
-        background: 'linear-gradient(180deg, #1a0800 0%, #2d1200 100%)',
-        borderBottom: '3px solid #f59518',
-        padding: '0.85rem 1.5rem',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem',
+        position: 'fixed', inset: 0, zIndex: 3000,
+        background: 'rgba(0,0,0,0.75)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: '1.25rem',
         animation: 'drinkSlideDown 0.28s ease',
         cursor: 'pointer',
       }}
     >
-      <span style={{ fontSize: '1.8rem' }}>🍺</span>
-      <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#f5c518', textAlign: 'center', lineHeight: 1.3 }}>
+      <span style={{ fontSize: '4rem' }}>🍺</span>
+      <span style={{ fontSize: '2.4rem', fontWeight: 'bold', color: '#f5c518', textAlign: 'center', lineHeight: 1.3, padding: '0 2rem' }}>
         {prompt}
       </span>
-      <span style={{ fontSize: '1.8rem' }}>🍺</span>
+      <span style={{ fontSize: '0.9rem', color: '#888', marginTop: '0.5rem' }}>tap to dismiss</span>
     </div>
   );
 }
