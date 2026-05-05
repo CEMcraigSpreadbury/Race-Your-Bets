@@ -62,8 +62,8 @@ function LandingScreen({ onCreate, onJoin, error, connected }) {
       </p>
 
       <div style={ls.bigBtnRow}>
-        <button onClick={onCreate} style={ls.bigBtn}>🖥 Host</button>
-        <button onClick={() => setView('join')} style={ls.bigBtn}>🎮 Join</button>
+        <button onClick={onCreate} style={ls.bigBtn}>Host</button>
+        <button onClick={() => setView('join')} style={ls.bigBtn}>Join</button>
       </div>
 
       {error && <p style={ls.error}>{error}</p>}
