@@ -1692,6 +1692,7 @@ export default function Game({
     const onSponsorshipsUpdate = ({ sponsorships }) => setAllSponsorships(sponsorships ?? []);
     const onSponsorError       = ({ message }) => alert(message);
     const onDrinkPrompt        = ({ message }) => {
+      if (isHost) return;
       setDrinkPrompt(message);
       clearTimeout(drinkDismissRef.current);
       drinkDismissRef.current = setTimeout(() => setDrinkPrompt(null), 5000);
@@ -1702,17 +1703,13 @@ export default function Game({
       setWinner(w);
       setGamePhase('finished');
       if (isHost) { stopRandomSounds(); playRaceFinish(); }
-      if (drinkingModeRef.current) {
-        if (isHost) {
-          showDrink();
-        } else {
-          const myP = p?.find((pay) => pay.playerId === mySocketId);
-          const lost = myP && myP.delta < 0;
-          const msg = lost ? 'Finish Your Drink! 🍺' : 'Drink! 🍺';
-          setDrinkPrompt(msg);
-          clearTimeout(drinkDismissRef.current);
-          drinkDismissRef.current = setTimeout(() => setDrinkPrompt(null), 8000);
-        }
+      if (!isHost && drinkingModeRef.current) {
+        const myP = p?.find((pay) => pay.playerId === mySocketId);
+        const lost = myP && myP.delta < 0;
+        const msg = lost ? 'Finish Your Drink! 🍺' : 'Drink! 🍺';
+        setDrinkPrompt(msg);
+        clearTimeout(drinkDismissRef.current);
+        drinkDismissRef.current = setTimeout(() => setDrinkPrompt(null), 8000);
       }
       if (p)       { setPayouts(p); if (!isHost) setShowResult(true); }
       if (summary) setBetSummary(summary);
@@ -1798,8 +1795,6 @@ export default function Game({
     return (
       <>
         <RaceCountdown prep={racePrep} />
-
-        <DrinkOverlay prompt={drinkPrompt} onDismiss={() => setDrinkPrompt(null)} />
 
         <div style={{ minHeight: '100vh', background: '#0a0a0a', padding: '0.3rem 0.5rem', display: 'flex', flexDirection: 'column' }}>
           <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', flex: 1 }}>
